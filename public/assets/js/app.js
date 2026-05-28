@@ -2096,7 +2096,9 @@
                 lineSourceCurrencyInput.value = lineSourceCurrency;
             }
 
-            if (productId === "") {
+            const isCustomRow = row.hasAttribute("data-purchase-custom-item");
+
+            if (productId === "" && !isCustomRow) {
                 setText("[data-line-stock]", 0, row);
                 setText("[data-line-subtotal]", 0, row);
                 return carry;
@@ -2346,6 +2348,7 @@
                 const remaining = Math.max(0, original - paymentApplied);
                 setText("[data-purchase-original]", original, form);
                 setText("[data-purchase-converted]", converted, form);
+                setNodeText("[data-purchase-total-currency]", normalizeCurrency(currency || secondaryCurrency), form);
                 setText("[data-line-count]", lineItemsState?.lineCount ?? 0, form);
                 setText("[data-line-quantity-total]", lineItemsState?.quantityTotal ?? 0, form);
                 setText("[data-payment-applied]", paymentApplied, form);

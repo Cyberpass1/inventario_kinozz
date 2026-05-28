@@ -391,7 +391,9 @@ class PurchaseControllerModern extends Controller
                 continue;
             }
 
+            $customName = trim((string) ($row['custom_name'] ?? ''));
             $hasAnyValue = trim((string) ($row['product_id'] ?? '')) !== ''
+                || $customName !== ''
                 || trim((string) ($row['quantity'] ?? '')) !== ''
                 || trim((string) ($row['cost_original'] ?? '')) !== '';
             if (! $hasAnyValue) {
@@ -399,13 +401,19 @@ class PurchaseControllerModern extends Controller
             }
 
             $productId = (int) ($row['product_id'] ?? 0);
-            if ($productId <= 0) {
-                throw new \RuntimeException('Cada renglon debe tener un producto valido.');
-            }
 
-            $product = $productModel->findVisible($productId);
-            if (! $product && $allowArchivedProducts) {
-                $product = $productModel->findAny($productId);
+            if ($productId <= 0 && $customName !== '') {
+                $product = $this->createCustomProduct($productModel, $row);
+                $productId = (int) ($product['id'] ?? 0);
+            } else {
+                if ($productId <= 0) {
+                    throw new \RuntimeException('Cada renglon debe tener un producto valido.');
+                }
+
+                $product = $productModel->findVisible($productId);
+                if (! $product && $allowArchivedProducts) {
+                    $product = $productModel->findAny($productId);
+                }
             }
 
             if (! $product || ! product_is_purchasable($product)) {
@@ -473,6 +481,56 @@ class PurchaseControllerModern extends Controller
             'date_from' => trim((string) ($_GET['from'] ?? '')),
             'date_to' => trim((string) ($_GET['to'] ?? '')),
         ];
+    }
+
+    private function createCustomProduct(Product $productModel, array $row): array
+    {
+        $name = trim((string) ($row['custom_name'] ?? ''));
+        if ($name === '') {
+            throw new \RuntimeException('El producto nuevo necesita un nombre.');
+        }
+
+        $sku = strtoupper(trim((string) ($row['custom_sku'] ?? '')));
+        $type = strtolower(trim((string) ($row['custom_product_type'] ?? 'merchandise')));
+        if (! in_array($type, ['merchandise', 'raw_material'], true)) {
+            $type = 'merchandise';
+        }
+        $unitLabel = trim((string) ($row['custom_unit_label'] ?? 'und'));
+        if ($unitLabel === '') {
+            $unitLabel = 'und';
+        }
+
+        if ($sku === '') {
+            $prefix = $type === 'raw_material' ? 'MP' : 'PR';
+            $attempts = 0;
+            do {
+                $candidate = $prefix . '-' . strtoupper(substr(uniqid('', false), -5));
+                $attempts++;
+            } while ($productModel->skuExists($candidate) && $attempts < 10);
+            $sku = $candidate;
+        } elseif ($productModel->skuExists($sku)) {
+            throw new \RuntimeException('Ya existe un producto con el SKU "' . $sku . '". Elige otro o deja el campo vacio para generar uno automatico.');
+        }
+
+        $newId = $productModel->insert([
+            'sku' => $sku,
+            'name' => $name,
+            'product_type' => $type,
+            'unit_label' => $unitLabel,
+            'stock' => 0,
+            'stock_min' => 0,
+            'cost' => (float) ($row['cost_original'] ?? 0),
+            'price' => 0,
+            'currency_code' => base_currency(),
+            'status' => 'active',
+        ]);
+
+        $product = $productModel->findVisible((int) $newId);
+        if (! $product) {
+            throw new \RuntimeException('No se pudo crear el producto "' . $name . '".');
+        }
+
+        return $product;
     }
 
     private function renderPurchaseEditModalContent(array $detail, array $suppliersAll, array $products, int $purchaseDueDays): string

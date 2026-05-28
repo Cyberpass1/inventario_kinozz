@@ -5466,4 +5466,131 @@ body.sidebar-collapsed .sidebar-profile-logout {
     line-height: 1.4;
 }
 
+/* =========================================================
+   POS - Compras: panel de producto personalizado
+   ========================================================= */
+.pos-supplier-label {
+    margin: 0;
+}
+
+.pos-supplier-select {
+    width: 100%;
+    min-height: 38px;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 10px;
+    background: #fff;
+    font-size: 0.9rem;
+}
+
+.pos-custom-product {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.85rem 0.95rem;
+    margin-top: 0.2rem;
+    border: 1.5px dashed rgba(99, 102, 241, 0.4);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(244, 247, 255, 0.95));
+}
+
+.pos-custom-product[hidden] {
+    display: none;
+}
+
+.pos-custom-product-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.pos-custom-product-head strong {
+    font-size: 0.86rem;
+    color: var(--brand-strong);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pos-custom-close {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.2rem;
+}
+
+.pos-custom-close:hover {
+    color: var(--text, #0f172a);
+}
+
+.pos-custom-product > small {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.pos-custom-grid {
+    display: grid;
+    gap: 0.45rem 0.55rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pos-custom-span {
+    grid-column: 1 / -1;
+}
+
+.pos-custom-grid label {
+    display: grid;
+    gap: 0.18rem;
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pos-custom-grid input,
+.pos-custom-grid select {
+    min-height: 34px;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 9px;
+    background: #fff;
+    font-size: 0.86rem;
+    color: var(--text, #0f172a);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.pos-custom-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+}
+
+.pos-custom-actions .btn {
+    min-height: 34px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
+}
+
+.line-item-card-custom {
+    border-color: rgba(99, 102, 241, 0.35) !important;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(248, 250, 252, 0.95)) !important;
+}
+
+@media (max-width: 720px) {
+    .pos-custom-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .pos-custom-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 

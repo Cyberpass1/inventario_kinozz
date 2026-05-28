@@ -141,10 +141,21 @@ class ExpenseController extends Controller
             throw new \RuntimeException('Debes indicar un monto mayor a cero para registrar el gasto.');
         }
 
+        $categoryId = (int) ($source['category_id'] ?? 0);
+        $customCategoryName = trim((string) ($source['custom_category_name'] ?? ''));
+
+        if ($categoryId <= 0 && $customCategoryName !== '') {
+            $categoryId = $this->resolveOrCreateCategory($customCategoryName);
+        }
+
+        if ($categoryId <= 0) {
+            throw new \RuntimeException('Debes seleccionar o crear una categoria de gasto.');
+        }
+
         $amounts = expense_currency_breakdown($amount, $currency, $rate);
 
         return [
-            'category_id' => (int) ($source['category_id'] ?? 0),
+            'category_id' => $categoryId,
             'expense_date' => $documentDate,
             'reference' => trim((string) ($source['reference'] ?? '')),
             'description' => trim((string) ($source['description'] ?? '')),
@@ -154,5 +165,20 @@ class ExpenseController extends Controller
             'amount_converted' => $amounts['amount_consolidated'],
             'payment_method' => $paymentMethod,
         ];
+    }
+
+    private function resolveOrCreateCategory(string $name): int
+    {
+        $categoryModel = new ExpenseCategory();
+        $existing = $categoryModel->all('name ASC');
+        $normalized = mb_strtolower(trim($name));
+
+        foreach ($existing as $row) {
+            if (mb_strtolower(trim((string) ($row['name'] ?? ''))) === $normalized) {
+                return (int) $row['id'];
+            }
+        }
+
+        return (int) $categoryModel->insert(['name' => trim($name)]);
     }
 }
