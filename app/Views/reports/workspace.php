@@ -50,93 +50,45 @@ $reportLinks = [
 ];
 ?>
 
-<section class="page-header">
-    <div>
-        <span class="eyebrow">Reportes</span>
-        <h2><?= e($title) ?></h2>
-        <p><?= e($description) ?></p>
-    </div>
-    <div class="header-summary">
-        <?php foreach ($summaryCards as $card): ?>
-            <div>
-                <span><?= e($card['label'] ?? '') ?></span>
-                <strong><?= e($card['value'] ?? '') ?></strong>
-                <?php if (($card['hint'] ?? '') !== ''): ?><small><?= e($card['hint']) ?></small><?php endif; ?>
-            </div>
-        <?php endforeach; ?>
-    </div>
-</section>
-
-<section class="report-links">
-    <?php foreach ($reportLinks as $link): ?>
-        <a class="report-card <?= $type === $link['type'] ? 'is-active' : '' ?>" href="/reports?type=<?= e($link['type']) ?>&from=<?= e($from) ?>&to=<?= e($to) ?>">
-            <span><?= e($link['label']) ?></span>
-            <strong><?= e($link['title']) ?></strong>
-            <p><?= $type === $link['type'] ? 'Vista actual seleccionada.' : 'Abrir este reporte en el mismo espacio.' ?></p>
-            <span class="tag"><?= e($link['tag']) ?></span>
-        </a>
-    <?php endforeach; ?>
-</section>
-
-<?php if ($type === 'inventory'): ?>
-    <article class="card">
-        <header class="section-head">
-            <div>
-                <h3>Graficas de inventario</h3>
-                <p>Exporta rankings visuales de productos: mayor stock, menor stock, mayor movimiento y mayor valor.</p>
-            </div>
-            <div class="report-tools">
-                <a
-                    class="btn btn-secondary"
-                    href="/reports/inventory-charts/pdf?chart=all&from=<?= e($from) ?>&to=<?= e($to) ?>"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >PDF completo</a>
-            </div>
-        </header>
-
-        <form method="get" action="/reports/inventory-charts/pdf" class="form inline-form" target="_blank" data-no-submit-loading="1">
-            <label>Grafica
-                <select name="chart">
-                    <option value="all">Todas las graficas</option>
-                    <option value="highest_stock">Mayor stock</option>
-                    <option value="lowest_stock">Menor stock</option>
-                    <option value="highest_movement">Mayor movimiento</option>
-                    <option value="highest_value">Mayor valor de inventario</option>
-                </select>
-            </label>
-            <label>Desde<input type="date" name="from" value="<?= e($from) ?>"></label>
-            <label>Hasta<input type="date" name="to" value="<?= e($to) ?>"></label>
-            <button class="btn">Exportar graficas completas</button>
-        </form>
-    </article>
-<?php endif; ?>
-
-<article class="card">
-    <header class="section-head">
-        <div>
-            <h3>Centro de reportes</h3>
-            <p>Todo se consulta desde este mismo espacio. Cambia tipo, fecha y exporta el resultado actual sin brincar entre vistas.</p>
+<section class="reports-shell">
+    <header class="reports-topbar">
+        <div class="reports-topbar-title">
+            <h3><?= e($title) ?></h3>
+            <small><?= e($description) ?></small>
         </div>
-        <div class="report-tools">
-            <a class="btn btn-secondary" href="<?= e($pdfUrl) ?>" target="_blank" rel="noopener noreferrer">PDF</a>
+        <div class="reports-topbar-actions">
+            <a class="btn btn-outline btn-sm" href="<?= e($pdfUrl) ?>" target="_blank" rel="noopener noreferrer">PDF</a>
             <?php if ($mode === 'treasury_accounts' && $canManageTreasury): ?>
-                <button type="button" class="btn btn-outline" data-modal-open="treasury-reconcile-modal">Conciliar saldo real</button>
-                <button type="button" class="btn btn-outline" data-modal-open="treasury-opening-balance-modal">Saldo inicial</button>
+                <button type="button" class="btn btn-outline btn-sm" data-modal-open="treasury-reconcile-modal">Conciliar</button>
+                <button type="button" class="btn btn-outline btn-sm" data-modal-open="treasury-opening-balance-modal">Saldo inicial</button>
             <?php endif; ?>
         </div>
     </header>
 
-    <form method="get" action="/reports" class="form inline-form">
-        <label>Tipo
-            <select name="type">
-                <?php foreach ($reportLinks as $link): ?>
-                    <option value="<?= e($link['type']) ?>" <?= $type === $link['type'] ? 'selected' : '' ?>><?= e($link['label']) ?></option>
-                <?php endforeach; ?>
-            </select>
+    <!-- Chips horizontal: tipos de reporte -->
+    <nav class="reports-chips" aria-label="Tipos de reporte">
+        <?php foreach ($reportLinks as $link): ?>
+            <a class="reports-chip <?= $type === $link['type'] ? 'is-active' : '' ?>" href="/reports?type=<?= e($link['type']) ?>&from=<?= e($from) ?>&to=<?= e($to) ?>">
+                <strong><?= e($link['label']) ?></strong>
+                <small><?= e($link['tag']) ?></small>
+            </a>
+        <?php endforeach; ?>
+    </nav>
+
+    <!-- Toolbar de filtros + contexto de moneda -->
+    <form method="get" action="/reports" class="reports-filters">
+        <input type="hidden" name="type" value="<?= e($type) ?>">
+        <label class="reports-filter">
+            <span>Desde</span>
+            <input type="date" name="from" value="<?= e($from) ?>">
+        </label>
+        <label class="reports-filter">
+            <span>Hasta</span>
+            <input type="date" name="to" value="<?= e($to) ?>">
         </label>
         <?php if ($type === 'inventory'): ?>
-            <label>Desglosar
+            <label class="reports-filter">
+                <span>Desglosar</span>
                 <select name="inventory_view">
                     <?php foreach ($inventoryBreakdownOptions as $value => $label): ?>
                         <option value="<?= e($value) ?>" <?= $inventoryBreakdown === $value ? 'selected' : '' ?>><?= e($label) ?></option>
@@ -144,31 +96,74 @@ $reportLinks = [
                 </select>
             </label>
         <?php endif; ?>
-        <label>Desde<input type="date" name="from" value="<?= e($from) ?>"></label>
-        <label>Hasta<input type="date" name="to" value="<?= e($to) ?>"></label>
-        <button class="btn">Actualizar</button>
+        <div class="reports-filter-actions">
+            <button class="btn btn-outline btn-sm">Actualizar</button>
+        </div>
+        <div class="reports-rate-context" title="Contexto monetario actual">
+            <span>1 <?= e($baseCurrency) ?> = <?= money($currentRate) ?> <?= e($secondaryCurrency) ?></span>
+        </div>
     </form>
 
-    <div class="live-panel">
-        <div><span>Moneda referencia</span><strong><?= e($baseCurrency) ?></strong></div>
-        <div><span>Moneda consolidada</span><strong><?= e($reportingCurrency) ?></strong></div>
-        <div><span>Tasa actual</span><strong>1 <?= e($baseCurrency) ?> = <?= money($currentRate) ?> <?= e($secondaryCurrency) ?></strong></div>
-    </div>
-
-    <?php if ($infoCards): ?>
-        <div class="kpi-strip">
+    <!-- KPI strip: summary + info cards en pills -->
+    <?php if ($summaryCards || $infoCards): ?>
+        <div class="reports-kpis">
+            <?php foreach ($summaryCards as $card): ?>
+                <div class="inventory-kpi">
+                    <span><?= e($card['label'] ?? '') ?></span>
+                    <strong><?= e($card['value'] ?? '') ?></strong>
+                    <?php if (($card['hint'] ?? '') !== ''): ?><em><?= e($card['hint']) ?></em><?php endif; ?>
+                </div>
+            <?php endforeach; ?>
             <?php foreach ($infoCards as $card): ?>
-                <div class="kpi-pill">
-                    <div>
-                        <span><?= e($card['label'] ?? '') ?></span>
-                        <strong><?= e($card['value'] ?? '') ?></strong>
-                        <?php if (($card['hint'] ?? '') !== ''): ?><small><?= e($card['hint']) ?></small><?php endif; ?>
-                    </div>
+                <div class="inventory-kpi">
+                    <span><?= e($card['label'] ?? '') ?></span>
+                    <strong><?= e($card['value'] ?? '') ?></strong>
+                    <?php if (($card['hint'] ?? '') !== ''): ?><em><?= e($card['hint']) ?></em><?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>
     <?php endif; ?>
-</article>
+</section>
+
+<?php if ($type === 'inventory'): ?>
+    <details class="card pos-history">
+        <summary class="pos-history-summary">
+            <div class="pos-history-summary-copy">
+                <h3>Graficas de inventario</h3>
+                <p>Exporta rankings visuales: mayor stock, menor stock, mayor movimiento y mayor valor.</p>
+            </div>
+            <span class="pos-history-toggle">
+                <span class="pos-history-toggle-show">Mostrar</span>
+                <span class="pos-history-toggle-hide">Ocultar</span>
+                <span class="pos-history-chevron" aria-hidden="true">&rsaquo;</span>
+            </span>
+        </summary>
+        <div class="pos-history-body">
+            <div class="actions-row pos-history-export">
+                <a
+                    class="btn btn-outline"
+                    href="/reports/inventory-charts/pdf?chart=all&from=<?= e($from) ?>&to=<?= e($to) ?>"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >PDF completo</a>
+            </div>
+            <form method="get" action="/reports/inventory-charts/pdf" class="form inline-form" target="_blank" data-no-submit-loading="1">
+                <label>Grafica
+                    <select name="chart">
+                        <option value="all">Todas las graficas</option>
+                        <option value="highest_stock">Mayor stock</option>
+                        <option value="lowest_stock">Menor stock</option>
+                        <option value="highest_movement">Mayor movimiento</option>
+                        <option value="highest_value">Mayor valor de inventario</option>
+                    </select>
+                </label>
+                <label>Desde<input type="date" name="from" value="<?= e($from) ?>"></label>
+                <label>Hasta<input type="date" name="to" value="<?= e($to) ?>"></label>
+                <button class="btn btn-outline">Exportar grafica seleccionada</button>
+            </form>
+        </div>
+    </details>
+<?php endif; ?>
 
 <?php if ($mode === 'balance'): ?>
     <article class="card">

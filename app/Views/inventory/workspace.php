@@ -1,67 +1,72 @@
-<section class="page-header">
-    <div>
-        <span class="eyebrow">Inventario</span>
-        <h2>Stock directo por producto</h2>
-        <p>Sin almacenes intermedios: el stock vive en el producto y los movimientos quedan en historial.</p>
-    </div>
-    <div class="header-summary">
-        <div><span>Productos</span><strong><?= (int) $summary['products'] ?></strong></div>
-        <div><span>Servicios</span><strong><?= (int) ($summary['services'] ?? 0) ?></strong></div>
-        <div><span>Criticos</span><strong><?= (int) $summary['low_stock'] ?></strong></div>
-        <div>
-            <span>Valor USD</span>
-            <strong><?= money($summary['inventory_value_usd'] ?? 0) ?></strong>
-            <small><?= money($summary['inventory_value_bs'] ?? 0) ?> <?= e(secondary_currency()) ?></small>
-        </div>
-    </div>
-</section>
-
 <datalist id="product-unit-options">
     <?php foreach (product_unit_suggestions() as $unit): ?>
         <option value="<?= e($unit) ?>"></option>
     <?php endforeach; ?>
 </datalist>
 
-<article class="card card-feature">
-    <header class="section-head">
-        <div>
-            <h3>Nuevo producto</h3>
-            <p>El formulario principal del modulo: simple para productos normales y mas especifico solo cuando hace falta.</p>
+<section class="inventory-shell">
+    <header class="inventory-topbar">
+        <div class="inventory-topbar-title">
+            <h3>Catalogo de productos</h3>
+            <small>Stock directo por producto, sin almacenes intermedios. <?= count($products) ?> registros totales.</small>
         </div>
-        <div class="actions-row inventory-header-actions">
-            <button type="button" class="btn btn-secondary" data-modal-open="inventory-product-variants" data-product-variants-trigger>Crear variantes</button>
-            <button type="button" class="btn btn-outline btn-soft-neutral" data-modal-open="inventory-category-create">Nueva categoria</button>
+        <div class="inventory-topbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-inventory-create-toggle>+ Producto</button>
+            <button type="button" class="btn btn-outline btn-sm" data-modal-open="inventory-category-create">+ Categoria</button>
+            <button type="button" class="btn btn-outline btn-sm" data-modal-open="inventory-product-variants" data-product-variants-trigger>Variantes</button>
         </div>
     </header>
-    <form method="post" action="/inventory/products" class="form two-cols" data-calc="product" data-product-form>
-            <?= csrf_field() ?>
-            <label>Categoria<select name="category_id" required><?php foreach ($categories as $category): ?><option value="<?= $category['id'] ?>"><?= e($category['name']) ?></option><?php endforeach; ?></select></label>
-            <label>Tipo
-                <select name="product_type" required>
-                    <?php foreach (product_type_options() as $value => $label): ?>
-                        <option value="<?= e($value) ?>" <?= $value === 'merchandise' ? 'selected' : '' ?>><?= e($label) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label>SKU<input name="sku" required></label>
-            <label>Nombre<input name="name" required></label>
-            <label data-product-unit-wrap style="display:none;"><span data-product-unit-label>Unidad base</span><input name="unit_label" value="und" list="product-unit-options" maxlength="20" placeholder="Ej. und, m, kg"></label>
-            <label data-product-stock-min-wrap><span data-product-stock-min-label>Stock minimo</span><input type="number" step="1" min="0" name="stock_min" value="0"></label>
-            <label><span data-product-cost-label>Costo unitario</span><input type="number" step="0.01" name="cost" value="0" data-cost-input></label>
-            <label><span data-product-price-label>Precio unitario</span><input type="number" step="0.01" name="price" value="0" data-price-input></label>
-            <label>Moneda<select name="currency_code"><option value="<?= e(base_currency()) ?>"><?= e(base_currency()) ?></option><option value="<?= e(secondary_currency()) ?>"><?= e(secondary_currency()) ?></option></select></label>
-            <label data-product-initial-stock-wrap><span data-product-initial-stock-label>Stock inicial</span><input type="number" step="1" min="0" name="initial_stock" value="0" data-stock-input></label>
-            <label class="col-span-2">Descripcion<textarea name="description"></textarea></label>
-            <div class="col-span-2 empty-state" data-product-type-note>
-                Producto normal: flujo simple de compra y venta. Si luego quieres fabricarlo, puedes agregar receta en Produccion sin complicar este formulario.
+
+    <div class="inventory-kpis">
+        <div class="inventory-kpi"><span>Productos</span><strong><?= (int) $summary['products'] ?></strong></div>
+        <div class="inventory-kpi"><span>Servicios</span><strong><?= (int) ($summary['services'] ?? 0) ?></strong></div>
+        <div class="inventory-kpi <?= (int) $summary['low_stock'] > 0 ? 'inventory-kpi-warning' : '' ?>"><span>Criticos</span><strong><?= (int) $summary['low_stock'] ?></strong></div>
+        <div class="inventory-kpi inventory-kpi-money">
+            <span>Valor inventario</span>
+            <strong><?= money($summary['inventory_value_usd'] ?? 0) ?> USD</strong>
+            <em><?= money($summary['inventory_value_bs'] ?? 0) ?> <?= e(secondary_currency()) ?></em>
+        </div>
+    </div>
+
+    <!-- Panel inline: Nuevo producto -->
+    <article class="card card-feature inventory-create-panel" data-inventory-create-panel hidden>
+        <header class="section-head">
+            <div>
+                <h3>Nuevo producto</h3>
+                <p>Solo lo necesario: si llenas mas campos del minimo, el formulario se adapta segun el tipo.</p>
             </div>
-            <div class="col-span-2 live-panel">
-                <div><span>Margen</span><strong data-product-margin>0,00</strong></div>
-                <div><span>Inversion inicial</span><strong data-product-investment>0,00</strong></div>
-            </div>
-            <button class="btn col-span-2">Guardar producto</button>
-    </form>
-</article>
+            <button type="button" class="pos-custom-close" data-inventory-create-toggle aria-label="Cerrar">&times;</button>
+        </header>
+        <form method="post" action="/inventory/products" class="form two-cols" data-calc="product" data-product-form>
+                <?= csrf_field() ?>
+                <label>Categoria<select name="category_id" required><?php foreach ($categories as $category): ?><option value="<?= $category['id'] ?>"><?= e($category['name']) ?></option><?php endforeach; ?></select></label>
+                <label>Tipo
+                    <select name="product_type" required>
+                        <?php foreach (product_type_options() as $value => $label): ?>
+                            <option value="<?= e($value) ?>" <?= $value === 'merchandise' ? 'selected' : '' ?>><?= e($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label>SKU<input name="sku" required></label>
+                <label>Nombre<input name="name" required></label>
+                <label data-product-unit-wrap style="display:none;"><span data-product-unit-label>Unidad base</span><input name="unit_label" value="und" list="product-unit-options" maxlength="20" placeholder="Ej. und, m, kg"></label>
+                <label data-product-stock-min-wrap><span data-product-stock-min-label>Stock minimo</span><input type="number" step="1" min="0" name="stock_min" value="0"></label>
+                <label><span data-product-cost-label>Costo unitario</span><input type="number" step="0.01" name="cost" value="0" data-cost-input></label>
+                <label><span data-product-price-label>Precio unitario</span><input type="number" step="0.01" name="price" value="0" data-price-input></label>
+                <label>Moneda<select name="currency_code"><option value="<?= e(base_currency()) ?>"><?= e(base_currency()) ?></option><option value="<?= e(secondary_currency()) ?>"><?= e(secondary_currency()) ?></option></select></label>
+                <label data-product-initial-stock-wrap><span data-product-initial-stock-label>Stock inicial</span><input type="number" step="1" min="0" name="initial_stock" value="0" data-stock-input></label>
+                <label class="col-span-2">Descripcion<textarea name="description"></textarea></label>
+                <div class="col-span-2 empty-state" data-product-type-note>
+                    Producto normal: flujo simple de compra y venta. Si luego quieres fabricarlo, puedes agregar receta en Produccion sin complicar este formulario.
+                </div>
+                <div class="col-span-2 live-panel live-panel-compact">
+                    <div><span>Margen</span><strong data-product-margin>0,00</strong></div>
+                    <div><span>Inversion inicial</span><strong data-product-investment>0,00</strong></div>
+                </div>
+                <button class="btn col-span-2">Guardar producto</button>
+        </form>
+    </article>
+</section>
 
 <div class="modal-shell" data-modal="inventory-category-create" aria-hidden="true">
     <div class="modal-backdrop" data-modal-close></div>
@@ -218,27 +223,48 @@
     </div>
 </details>
 
-<article class="card">
-    <header class="section-head">
-        <div>
-            <h3>Catalogo</h3>
-            <p>Filtra por nombre o SKU y navega el listado con scroll interno.</p>
-        </div>
-    </header>
-    <div class="catalog-toolbar">
-        <label class="catalog-search">
-            <span>Buscar producto o SKU</span>
+<article class="card inventory-catalog-card">
+    <div class="inventory-catalog-toolbar" data-inventory-filters>
+        <label class="inventory-filter inventory-filter-search">
+            <span>Buscar</span>
             <input
                 type="search"
-                placeholder="Ej. tornillo, sku-001..."
+                placeholder="SKU, nombre o descripcion..."
                 autocomplete="off"
                 data-inventory-catalog-search-input
-                data-table-filter-input
-                data-table-filter-target="inventory-catalog"
+                data-inventory-filter-text
             >
         </label>
-        <div class="catalog-results" data-inventory-catalog-count data-table-filter-count data-table-filter-target="inventory-catalog" data-table-filter-label="productos">
-            <?= count($products) ?> productos
+        <label class="inventory-filter">
+            <span>Categoria</span>
+            <select data-inventory-filter-category>
+                <option value="">Todas</option>
+                <?php foreach ($categories as $category): ?>
+                    <option value="<?= (int) $category['id'] ?>"><?= e($category['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="inventory-filter">
+            <span>Tipo</span>
+            <select data-inventory-filter-type>
+                <option value="">Todos</option>
+                <?php foreach (product_type_options() as $value => $label): ?>
+                    <option value="<?= e($value) ?>"><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="inventory-filter">
+            <span>Estado</span>
+            <select data-inventory-filter-status>
+                <option value="">Todos</option>
+                <option value="active">Activos</option>
+                <option value="inactive">Inactivos</option>
+                <option value="low_stock">Stock critico</option>
+            </select>
+        </label>
+        <div class="inventory-filter-meta">
+            <strong data-inventory-filter-count><?= count($products) ?></strong>
+            <small>de <?= count($products) ?></small>
         </div>
     </div>
     <div class="table-wrap table-wrap-scrollable table-wrap-mobile-slider" data-table-filter-container="inventory-catalog">
@@ -246,7 +272,18 @@
             <thead><tr><th>SKU</th><th>Producto</th><th>Tipo</th><th>Categoria</th><th>Unidad</th><th>Estado</th><th>Minimo</th><th>Existencia</th><th>Costo</th><th>Precio</th><th></th></tr></thead>
             <tbody data-inventory-catalog-rows data-table-filter-rows="inventory-catalog">
                 <?php foreach ($products as $row): ?>
-                    <tr data-filter-search="<?= e(strtolower(trim((string) ($row['sku'] ?? '') . ' ' . (string) ($row['name'] ?? '')))) ?>">
+                    <?php
+                        $tracks = product_tracks_inventory($row);
+                        $isLow = $tracks && (float) $row['stock'] <= (float) $row['stock_min'];
+                        $status = (string) ($row['status'] ?? 'active');
+                    ?>
+                    <tr
+                        data-filter-search="<?= e(strtolower(trim((string) ($row['sku'] ?? '') . ' ' . (string) ($row['name'] ?? '') . ' ' . (string) ($row['description'] ?? '')))) ?>"
+                        data-row-category="<?= e((string) ($row['category_id'] ?? '')) ?>"
+                        data-row-type="<?= e((string) ($row['product_type'] ?? 'merchandise')) ?>"
+                        data-row-status="<?= e($status) ?>"
+                        data-row-low-stock="<?= $isLow ? '1' : '0' ?>"
+                    >
                         <td data-label="SKU"><?= e($row['sku']) ?></td>
                         <td data-label="Producto">
                             <strong><?= e($row['name']) ?></strong>
@@ -647,45 +684,73 @@
         };
 
         const bindInventoryCatalogFilter = () => {
-            const input = document.querySelector("[data-inventory-catalog-search-input]");
+            const textInput = document.querySelector("[data-inventory-filter-text]");
+            const categorySelect = document.querySelector("[data-inventory-filter-category]");
+            const typeSelect = document.querySelector("[data-inventory-filter-type]");
+            const statusSelect = document.querySelector("[data-inventory-filter-status]");
             const rows = Array.from(document.querySelectorAll("[data-inventory-catalog-rows] tr[data-filter-search]"));
             const emptyState = document.querySelector("[data-inventory-catalog-empty]");
-            const countNode = document.querySelector("[data-inventory-catalog-count]");
+            const countNode = document.querySelector("[data-inventory-filter-count]");
 
-            if (!input || rows.length === 0) {
+            if (rows.length === 0) {
                 return;
             }
 
             const total = rows.length;
 
             const sync = () => {
-                const term = String(input.value || "").trim().toLowerCase();
+                const term = String(textInput?.value || "").trim().toLowerCase();
+                const cat = String(categorySelect?.value || "").trim();
+                const type = String(typeSelect?.value || "").trim();
+                const status = String(statusSelect?.value || "").trim();
                 let visible = 0;
 
                 rows.forEach((row) => {
                     const haystack = String(row.dataset.filterSearch || "").toLowerCase();
-                    const matches = term === "" || haystack.includes(term);
+                    const matchText = term === "" || haystack.includes(term);
+                    const matchCat = cat === "" || String(row.dataset.rowCategory || "") === cat;
+                    const matchType = type === "" || String(row.dataset.rowType || "") === type;
+
+                    let matchStatus = true;
+                    if (status === "active" || status === "inactive") {
+                        matchStatus = String(row.dataset.rowStatus || "") === status;
+                    } else if (status === "low_stock") {
+                        matchStatus = String(row.dataset.rowLowStock || "") === "1";
+                    }
+
+                    const matches = matchText && matchCat && matchType && matchStatus;
                     row.classList.toggle("is-filter-hidden", !matches);
 
-                    if (matches) {
-                        visible += 1;
-                    }
+                    if (matches) visible += 1;
                 });
 
-                if (emptyState) {
-                    emptyState.hidden = visible !== 0;
-                }
-
-                if (countNode) {
-                    countNode.textContent = term === ""
-                        ? `${total} productos`
-                        : `${visible} de ${total} productos`;
-                }
+                if (emptyState) emptyState.hidden = visible !== 0;
+                if (countNode) countNode.textContent = String(visible);
             };
 
-            input.addEventListener("input", sync);
-            input.addEventListener("change", sync);
+            [textInput, categorySelect, typeSelect, statusSelect].forEach((el) => {
+                if (!el) return;
+                el.addEventListener("input", sync);
+                el.addEventListener("change", sync);
+            });
             sync();
+        };
+
+        const bindInventoryCreateToggle = () => {
+            const panel = document.querySelector("[data-inventory-create-panel]");
+            const buttons = document.querySelectorAll("[data-inventory-create-toggle]");
+            if (!panel || buttons.length === 0) return;
+
+            buttons.forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    panel.hidden = !panel.hidden;
+                    if (!panel.hidden) {
+                        const firstInput = panel.querySelector("input[name='sku']");
+                        window.setTimeout(() => firstInput?.focus(), 80);
+                        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                });
+            });
         };
 
         document.querySelectorAll("[data-product-form]").forEach((form) => {
@@ -867,5 +932,6 @@
         });
 
         bindInventoryCatalogFilter();
+        bindInventoryCreateToggle();
     })();
 </script>
