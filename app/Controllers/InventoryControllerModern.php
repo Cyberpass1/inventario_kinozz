@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Core\CSRF;
 use App\Core\Database;
 use App\Models\Category;
 use App\Models\Inventory;
@@ -146,6 +147,139 @@ class InventoryControllerModern extends Controller
 
         flash('success', 'Producto creado.');
         $this->redirect('/inventory');
+    }
+
+    public function importProducts(): void
+    {
+        $raw = file_get_contents('php://input');
+        $payload = json_decode((string) $raw, true);
+        if (!is_array($payload)) {
+            $payload = $_POST;
+        }
+
+        if (!CSRF::validate((string) ($payload['_csrf'] ?? ($_POST['_csrf'] ?? '')))) {
+            $this->json(['ok' => false, 'message' => 'CSRF invalido. Recarga la pagina e intentalo de nuevo.'], 419);
+        }
+
+        $rows = $payload['rows'] ?? [];
+        if (!is_array($rows) || $rows === []) {
+            $this->json(['ok' => false, 'message' => 'No recibimos filas para importar.'], 422);
+        }
+
+        $productModel = new Product();
+        $categoryModel = new Category();
+
+        $existingCategories = [];
+        foreach ($categoryModel->all('name ASC') as $row) {
+            $name = mb_strtolower(trim((string) ($row['name'] ?? '')));
+            if ($name !== '') {
+                $existingCategories[$name] = (int) ($row['id'] ?? 0);
+            }
+        }
+
+        $allowedTypes = ['merchandise', 'raw_material', 'finished_good', 'service'];
+        $allowedCurrencies = [base_currency(), secondary_currency(), 'USD', 'VES'];
+
+        $db = Database::connection();
+        $db->beginTransaction();
+
+        $created = 0;
+        $errors = [];
+
+        try {
+            foreach ($rows as $index => $row) {
+                if (!is_array($row)) {
+                    $errors[] = ['row' => $index + 2, 'message' => 'Fila invalida'];
+                    continue;
+                }
+
+                $sku = strtoupper(trim((string) ($row['sku'] ?? '')));
+                $name = trim((string) ($row['name'] ?? ''));
+                if ($sku === '' || $name === '') {
+                    $errors[] = ['row' => $index + 2, 'message' => 'SKU y nombre son obligatorios'];
+                    continue;
+                }
+
+                if ($productModel->findBySku($sku)) {
+                    $errors[] = ['row' => $index + 2, 'message' => 'SKU ya existe: ' . $sku];
+                    continue;
+                }
+
+                $productType = strtolower(trim((string) ($row['product_type'] ?? 'merchandise')));
+                if (!in_array($productType, $allowedTypes, true)) {
+                    $productType = 'merchandise';
+                }
+
+                $currency = strtoupper(trim((string) ($row['currency_code'] ?? base_currency())));
+                if (!in_array($currency, $allowedCurrencies, true)) {
+                    $currency = base_currency();
+                }
+
+                $categoryId = null;
+                $categoryName = trim((string) ($row['category'] ?? ''));
+                if ($categoryName !== '') {
+                    $key = mb_strtolower($categoryName);
+                    if (isset($existingCategories[$key])) {
+                        $categoryId = $existingCategories[$key];
+                    } else {
+                        $newId = (int) $categoryModel->insert(['name' => $categoryName, 'description' => '']);
+                        if ($newId > 0) {
+                            $existingCategories[$key] = $newId;
+                            $categoryId = $newId;
+                        }
+                    }
+                }
+
+                $tracksInventory = product_tracks_inventory($productType);
+                $unitLabel = normalize_product_unit((string) ($row['unit_label'] ?? ''), $productType);
+                $cost = max(0, (float) ($row['cost'] ?? 0));
+                $price = max(0, (float) ($row['price'] ?? 0));
+                $stockMin = $tracksInventory ? max(0, (float) ($row['stock_min'] ?? 0)) : 0;
+                $initialStock = $tracksInventory ? max(0, (float) ($row['initial_stock'] ?? 0)) : 0;
+
+                try {
+                    $productId = (int) $productModel->insert([
+                        'category_id' => $categoryId,
+                        'sku' => $sku,
+                        'name' => $name,
+                        'description' => trim((string) ($row['description'] ?? '')),
+                        'product_type' => $productType,
+                        'unit_label' => $unitLabel,
+                        'stock' => 0,
+                        'stock_min' => $stockMin,
+                        'cost' => $cost,
+                        'price' => $price,
+                        'currency_code' => $currency,
+                    ]);
+
+                    if ($productId > 0 && $initialStock > 0) {
+                        Inventory::increase($productId, $initialStock, 'initial', 'IMPORTACION', 'Carga inicial por importacion masiva');
+                    }
+
+                    $created += 1;
+                } catch (\Throwable $rowException) {
+                    $errors[] = ['row' => $index + 2, 'message' => $rowException->getMessage()];
+                }
+            }
+
+            $db->commit();
+        } catch (\Throwable $exception) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            $this->json([
+                'ok' => false,
+                'message' => 'Error durante la importacion: ' . $exception->getMessage(),
+                'errors' => $errors,
+            ], 422);
+        }
+
+        $this->json([
+            'ok' => true,
+            'created' => $created,
+            'errors' => $errors,
+            'message' => "Importacion completada. {$created} productos creados.",
+        ]);
     }
 
     public function duplicateProduct(): void

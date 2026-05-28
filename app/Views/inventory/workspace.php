@@ -12,6 +12,7 @@
         </div>
         <div class="inventory-topbar-actions">
             <button type="button" class="btn btn-outline btn-sm" data-inventory-create-toggle>+ Producto</button>
+            <button type="button" class="btn btn-outline btn-sm" data-modal-open="inventory-import" title="Cargar productos masivamente desde Excel o CSV">+ Importar</button>
             <button type="button" class="btn btn-outline btn-sm" data-modal-open="inventory-category-create">+ Categoria</button>
             <button type="button" class="btn btn-outline btn-sm" data-modal-open="inventory-product-variants" data-product-variants-trigger>Variantes</button>
         </div>
@@ -415,6 +416,89 @@
 
             <button class="btn col-span-2">Guardar cambios</button>
         </form>
+    </div>
+</div>
+
+<?php
+$importTargets = [
+    ['key' => 'sku',           'label' => 'SKU',             'required' => true,  'hint' => 'Codigo unico del producto'],
+    ['key' => 'name',          'label' => 'Nombre',          'required' => true,  'hint' => 'Nombre comercial'],
+    ['key' => 'category',      'label' => 'Categoria',       'required' => false, 'hint' => 'Se crea si no existe'],
+    ['key' => 'product_type',  'label' => 'Tipo',            'required' => false, 'hint' => 'merchandise / raw_material / finished_good / service'],
+    ['key' => 'unit_label',    'label' => 'Unidad',          'required' => false, 'hint' => 'Ej. und, m, kg'],
+    ['key' => 'cost',          'label' => 'Costo',           'required' => false, 'hint' => 'Numero decimal'],
+    ['key' => 'price',         'label' => 'Precio',          'required' => false, 'hint' => 'Numero decimal'],
+    ['key' => 'currency_code', 'label' => 'Moneda',          'required' => false, 'hint' => base_currency() . ' / ' . secondary_currency()],
+    ['key' => 'initial_stock', 'label' => 'Stock inicial',   'required' => false, 'hint' => 'Carga inicial'],
+    ['key' => 'stock_min',     'label' => 'Stock minimo',    'required' => false, 'hint' => 'Para alertas'],
+    ['key' => 'description',   'label' => 'Descripcion',     'required' => false, 'hint' => 'Opcional'],
+];
+?>
+<div class="modal-shell" data-modal="inventory-import" aria-hidden="true">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="inventory-import-title">
+        <header class="modal-header">
+            <div>
+                <span class="eyebrow">Catalogo</span>
+                <h3 id="inventory-import-title">Importar productos desde Excel</h3>
+            </div>
+            <button type="button" class="modal-close" data-modal-close>&times;</button>
+        </header>
+
+        <div class="import-shell" data-import-shell>
+            <div class="import-intro">
+                <p>Sube un archivo <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong>. La primera fila debe contener los titulos de columna. Mostraremos una vista previa antes de cargar.</p>
+                <div class="actions-row">
+                    <label class="btn btn-outline btn-sm" for="inventory-import-file">Elegir archivo</label>
+                    <input id="inventory-import-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden data-import-file>
+                    <button type="button" class="btn btn-outline btn-sm" data-import-template>Descargar plantilla</button>
+                    <span class="import-file-name" data-import-file-name>Ningun archivo seleccionado</span>
+                </div>
+                <small class="empty-state import-status" data-import-status>Columnas reconocidas: SKU, Nombre, Categoria, Tipo, Unidad, Costo, Precio, Moneda, Stock inicial, Stock minimo, Descripcion. SKU y Nombre son obligatorios.</small>
+            </div>
+
+            <div class="import-mapping" data-import-mapping hidden>
+                <h4>Asignacion de columnas detectada</h4>
+                <p class="empty-state">Cada columna del archivo se asocia con un campo del catalogo. Ajusta la asignacion si lo necesitas.</p>
+                <div class="import-mapping-grid" data-import-mapping-grid></div>
+            </div>
+
+            <div class="import-preview" data-import-preview hidden>
+                <div class="import-preview-head">
+                    <h4>Vista previa</h4>
+                    <small data-import-preview-summary>0 filas listas para importar.</small>
+                </div>
+                <div class="table-wrap import-preview-wrap">
+                    <table class="table import-preview-table">
+                        <thead>
+                            <tr data-import-preview-head>
+                                <?php foreach ($importTargets as $target): ?>
+                                    <th>
+                                        <?= e($target['label']) ?>
+                                        <?php if ($target['required']): ?>
+                                            <span class="badge badge-danger" title="Obligatorio">*</span>
+                                        <?php endif; ?>
+                                    </th>
+                                <?php endforeach; ?>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody data-import-preview-body>
+                            <tr><td colspan="<?= count($importTargets) + 1 ?>" class="empty-state">Aun no hay archivo cargado.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <small class="empty-state" data-import-preview-more hidden></small>
+            </div>
+
+            <div class="actions-row import-actions">
+                <button type="button" class="btn btn-outline" data-modal-close>Cancelar</button>
+                <button type="button" class="btn" data-import-submit disabled>Importar productos</button>
+            </div>
+        </div>
+
+        <script type="application/json" data-import-targets><?= json_encode($importTargets, JSON_UNESCAPED_UNICODE) ?></script>
+        <script type="application/json" data-import-existing-categories><?= json_encode(array_map(static fn (array $c): string => (string) ($c['name'] ?? ''), $categories), JSON_UNESCAPED_UNICODE) ?></script>
     </div>
 </div>
 
@@ -933,5 +1017,450 @@
 
         bindInventoryCatalogFilter();
         bindInventoryCreateToggle();
+        bindInventoryImport();
+    })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<script>
+    (function () {
+        "use strict";
+
+        window.bindInventoryImport = function bindInventoryImport() {
+            const modal = document.querySelector("[data-modal='inventory-import']");
+            if (!modal) {
+                return;
+            }
+
+            const fileInput = modal.querySelector("[data-import-file]");
+            const fileName = modal.querySelector("[data-import-file-name]");
+            const statusNode = modal.querySelector("[data-import-status]");
+            const templateBtn = modal.querySelector("[data-import-template]");
+            const mappingShell = modal.querySelector("[data-import-mapping]");
+            const mappingGrid = modal.querySelector("[data-import-mapping-grid]");
+            const previewShell = modal.querySelector("[data-import-preview]");
+            const previewBody = modal.querySelector("[data-import-preview-body]");
+            const previewSummary = modal.querySelector("[data-import-preview-summary]");
+            const previewMore = modal.querySelector("[data-import-preview-more]");
+            const submitBtn = modal.querySelector("[data-import-submit]");
+            const targets = JSON.parse(modal.querySelector("[data-import-targets]").textContent || "[]");
+            const existingCategories = JSON.parse(modal.querySelector("[data-import-existing-categories]").textContent || "[]");
+
+            const csrfToken = (document.querySelector("input[name='_csrf']")?.value || "");
+
+            const normalize = (value) => String(value ?? "")
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[̀-ͯ]/g, "")
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "");
+
+            const aliasMap = {
+                sku: ["sku", "codigo", "code", "ref", "referencia"],
+                name: ["name", "nombre", "producto", "descripcion_corta", "titulo"],
+                category: ["category", "categoria", "rubro", "linea"],
+                product_type: ["product_type", "tipo", "tipo_producto", "type"],
+                unit_label: ["unit_label", "unidad", "unit", "uom", "medida"],
+                cost: ["cost", "costo", "coste", "purchase_cost", "costo_unitario"],
+                price: ["price", "precio", "pvp", "precio_venta", "precio_unitario"],
+                currency_code: ["currency_code", "moneda", "currency", "divisa"],
+                initial_stock: ["initial_stock", "stock_inicial", "stock", "existencia", "existencias", "cantidad"],
+                stock_min: ["stock_min", "minimo", "stock_minimo", "min_stock", "reorden"],
+                description: ["description", "descripcion", "detalle", "notas", "observaciones"],
+            };
+
+            const typeAliases = {
+                merchandise: ["merchandise", "mercaderia", "mercancia", "producto", "venta"],
+                raw_material: ["raw_material", "materia_prima", "materia", "insumo"],
+                finished_good: ["finished_good", "terminado", "producto_terminado", "manufacturado"],
+                service: ["service", "servicio"],
+            };
+
+            let parsedRows = [];
+            let parsedHeaders = [];
+            let mapping = {};
+            const PREVIEW_LIMIT = 20;
+
+            const resetState = () => {
+                parsedRows = [];
+                parsedHeaders = [];
+                mapping = {};
+                mappingShell.hidden = true;
+                previewShell.hidden = true;
+                previewMore.hidden = true;
+                mappingGrid.innerHTML = "";
+                previewBody.innerHTML = `<tr><td colspan="${targets.length + 1}" class="empty-state">Aun no hay archivo cargado.</td></tr>`;
+                submitBtn.disabled = true;
+                fileName.textContent = "Ningun archivo seleccionado";
+            };
+
+            const setStatus = (message, tone = "muted") => {
+                statusNode.textContent = message;
+                statusNode.dataset.tone = tone;
+            };
+
+            const detectMapping = (headers) => {
+                const result = {};
+                headers.forEach((rawHeader, index) => {
+                    const normalized = normalize(rawHeader);
+                    for (const target of targets) {
+                        if (result[target.key] !== undefined) continue;
+                        const aliases = aliasMap[target.key] || [target.key];
+                        if (aliases.includes(normalized)) {
+                            result[target.key] = index;
+                        }
+                    }
+                });
+                return result;
+            };
+
+            const renderMapping = () => {
+                mappingGrid.innerHTML = "";
+                targets.forEach((target) => {
+                    const wrap = document.createElement("label");
+                    wrap.className = "import-mapping-field";
+                    const span = document.createElement("span");
+                    span.innerHTML = `${target.label}${target.required ? ' <em class="import-required">*</em>' : ''}<small>${target.hint || ""}</small>`;
+                    const select = document.createElement("select");
+                    select.dataset.importMapKey = target.key;
+                    const blank = document.createElement("option");
+                    blank.value = "";
+                    blank.textContent = target.required ? "-- Selecciona columna --" : "(Sin mapear)";
+                    select.appendChild(blank);
+                    parsedHeaders.forEach((header, index) => {
+                        const option = document.createElement("option");
+                        option.value = String(index);
+                        option.textContent = `${header || `Columna ${index + 1}`}`;
+                        if (mapping[target.key] === index) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                    select.addEventListener("change", () => {
+                        const raw = select.value;
+                        if (raw === "") {
+                            delete mapping[target.key];
+                        } else {
+                            mapping[target.key] = Number(raw);
+                        }
+                        renderPreview();
+                    });
+                    wrap.append(span, select);
+                    mappingGrid.appendChild(wrap);
+                });
+            };
+
+            const cellAt = (row, index) => {
+                if (index === undefined || index === null) return "";
+                const value = row[index];
+                if (value === undefined || value === null) return "";
+                return String(value).trim();
+            };
+
+            const normalizeType = (raw) => {
+                const value = normalize(raw);
+                if (!value) return "";
+                for (const [canonical, aliases] of Object.entries(typeAliases)) {
+                    if (aliases.includes(value)) return canonical;
+                }
+                return raw.trim();
+            };
+
+            const normalizeCurrency = (raw) => {
+                const value = String(raw || "").trim().toUpperCase();
+                if (!value) return "";
+                if (["BS", "BSS", "BS.S", "BOLIVARES", "VES", "VEF"].includes(value)) return "VES";
+                if (["USD", "DOLAR", "DOLARES", "$"].includes(value)) return "USD";
+                return value;
+            };
+
+            const parseNumberLoose = (raw) => {
+                if (raw === "" || raw === null || raw === undefined) return 0;
+                const cleaned = String(raw).trim().replace(/\s+/g, "").replace(/[^0-9,.-]/g, "");
+                if (cleaned === "") return 0;
+                const hasComma = cleaned.includes(",");
+                const hasDot = cleaned.includes(".");
+                let normalized = cleaned;
+                if (hasComma && hasDot) {
+                    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+                } else if (hasComma) {
+                    normalized = cleaned.replace(",", ".");
+                }
+                const value = Number.parseFloat(normalized);
+                return Number.isFinite(value) ? value : 0;
+            };
+
+            const buildRowPayload = (row) => {
+                const get = (key) => cellAt(row, mapping[key]);
+                return {
+                    sku: get("sku").toUpperCase(),
+                    name: get("name"),
+                    category: get("category"),
+                    product_type: normalizeType(get("product_type")) || "merchandise",
+                    unit_label: get("unit_label") || "und",
+                    cost: parseNumberLoose(get("cost")),
+                    price: parseNumberLoose(get("price")),
+                    currency_code: normalizeCurrency(get("currency_code")) || "USD",
+                    initial_stock: parseNumberLoose(get("initial_stock")),
+                    stock_min: parseNumberLoose(get("stock_min")),
+                    description: get("description"),
+                };
+            };
+
+            const validateRow = (payload) => {
+                const errors = [];
+                if (!payload.sku) errors.push("SKU vacio");
+                if (!payload.name) errors.push("Nombre vacio");
+                if (payload.product_type && !["merchandise", "raw_material", "finished_good", "service"].includes(payload.product_type)) {
+                    errors.push("Tipo invalido");
+                }
+                if (payload.currency_code && !["USD", "VES"].includes(payload.currency_code)) {
+                    errors.push("Moneda invalida");
+                }
+                if (payload.cost < 0) errors.push("Costo negativo");
+                if (payload.price < 0) errors.push("Precio negativo");
+                return errors;
+            };
+
+            const renderPreview = () => {
+                const requiredMissing = targets.filter(t => t.required && mapping[t.key] === undefined);
+                if (requiredMissing.length > 0) {
+                    previewBody.innerHTML = `<tr><td colspan="${targets.length + 1}" class="empty-state">Asigna las columnas obligatorias: ${requiredMissing.map(t => t.label).join(", ")}.</td></tr>`;
+                    previewSummary.textContent = "0 filas listas para importar.";
+                    previewMore.hidden = true;
+                    submitBtn.disabled = true;
+                    return;
+                }
+
+                previewBody.innerHTML = "";
+                const seenSkus = new Set();
+                let validCount = 0;
+                let totalCount = 0;
+                const rowsToShow = parsedRows.slice(0, PREVIEW_LIMIT);
+
+                rowsToShow.forEach((row) => {
+                    const payload = buildRowPayload(row);
+                    if (Object.values(payload).every(v => v === "" || v === 0 || v === "USD" || v === "und" || v === "merchandise")) {
+                        return;
+                    }
+                    totalCount += 1;
+                    const errors = validateRow(payload);
+                    if (!errors.length && seenSkus.has(payload.sku)) {
+                        errors.push("SKU duplicado en archivo");
+                    }
+                    if (!errors.length) {
+                        seenSkus.add(payload.sku);
+                        validCount += 1;
+                    }
+
+                    const tr = document.createElement("tr");
+                    if (errors.length) tr.className = "import-row-error";
+                    targets.forEach((target) => {
+                        const td = document.createElement("td");
+                        td.textContent = String(payload[target.key] ?? "");
+                        tr.appendChild(td);
+                    });
+                    const statusTd = document.createElement("td");
+                    if (errors.length) {
+                        statusTd.innerHTML = `<span class="badge badge-danger" title="${errors.join('; ')}">${errors.join(", ")}</span>`;
+                    } else {
+                        statusTd.innerHTML = '<span class="badge badge-ok">Listo</span>';
+                    }
+                    tr.appendChild(statusTd);
+                    previewBody.appendChild(tr);
+                });
+
+                let totalValid = 0;
+                let totalErrors = 0;
+                const seenAll = new Set();
+                parsedRows.forEach((row) => {
+                    const payload = buildRowPayload(row);
+                    if (!payload.sku && !payload.name) return;
+                    const errors = validateRow(payload);
+                    if (errors.length || seenAll.has(payload.sku)) {
+                        totalErrors += 1;
+                    } else {
+                        seenAll.add(payload.sku);
+                        totalValid += 1;
+                    }
+                });
+
+                if (totalCount === 0) {
+                    previewBody.innerHTML = `<tr><td colspan="${targets.length + 1}" class="empty-state">El archivo no contiene filas con datos.</td></tr>`;
+                }
+
+                previewSummary.textContent = `${totalValid} filas listas para importar${totalErrors > 0 ? ` (${totalErrors} con errores se omitiran)` : ""}.`;
+                if (parsedRows.length > PREVIEW_LIMIT) {
+                    previewMore.hidden = false;
+                    previewMore.textContent = `Mostrando primeras ${PREVIEW_LIMIT} filas de ${parsedRows.length}. Las demas se procesaran al importar.`;
+                } else {
+                    previewMore.hidden = true;
+                }
+
+                submitBtn.disabled = totalValid === 0;
+            };
+
+            const handleParsed = (rows) => {
+                if (!rows || rows.length === 0) {
+                    setStatus("El archivo esta vacio o no tiene filas.", "danger");
+                    resetState();
+                    return;
+                }
+                parsedHeaders = (rows[0] || []).map((cell) => String(cell ?? "").trim());
+                parsedRows = rows.slice(1).filter((row) => row.some((cell) => String(cell ?? "").trim() !== ""));
+                mapping = detectMapping(parsedHeaders);
+
+                const detectedNames = targets
+                    .filter((t) => mapping[t.key] !== undefined)
+                    .map((t) => t.label);
+                if (detectedNames.length === 0) {
+                    setStatus("No reconocimos los titulos. Asigna manualmente cada columna.", "danger");
+                } else {
+                    setStatus(`Detectamos automaticamente: ${detectedNames.join(", ")}. Revisa la vista previa.`, "ok");
+                }
+
+                mappingShell.hidden = false;
+                previewShell.hidden = false;
+                renderMapping();
+                renderPreview();
+            };
+
+            const parseFile = async (file) => {
+                if (!file) return;
+                fileName.textContent = file.name;
+                setStatus("Leyendo archivo...", "muted");
+
+                try {
+                    const buffer = await file.arrayBuffer();
+                    if (!window.XLSX) {
+                        setStatus("Aun se esta cargando la libreria de lectura. Intenta de nuevo en unos segundos.", "danger");
+                        return;
+                    }
+                    const workbook = window.XLSX.read(buffer, { type: "array" });
+                    const firstSheet = workbook.SheetNames[0];
+                    if (!firstSheet) {
+                        setStatus("El archivo no contiene hojas.", "danger");
+                        return;
+                    }
+                    const rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], {
+                        header: 1,
+                        raw: false,
+                        defval: "",
+                    });
+                    handleParsed(rows);
+                } catch (error) {
+                    console.error(error);
+                    setStatus("No pudimos leer el archivo. Verifica que sea un .xlsx, .xls o .csv valido.", "danger");
+                }
+            };
+
+            fileInput.addEventListener("change", () => {
+                const file = fileInput.files && fileInput.files[0];
+                if (file) {
+                    parseFile(file);
+                }
+            });
+
+            templateBtn.addEventListener("click", () => {
+                const header = targets.map((t) => t.label).join(",");
+                const example = [
+                    "SKU-EJEMPLO-1",
+                    "Producto de ejemplo",
+                    existingCategories[0] || "General",
+                    "merchandise",
+                    "und",
+                    "10",
+                    "15",
+                    "USD",
+                    "20",
+                    "5",
+                    "Producto creado desde plantilla",
+                ].join(",");
+                const blob = new Blob(["﻿" + header + "\n" + example + "\n"], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "plantilla-productos.csv";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            });
+
+            submitBtn.addEventListener("click", async () => {
+                const requiredMissing = targets.filter(t => t.required && mapping[t.key] === undefined);
+                if (requiredMissing.length > 0) {
+                    return;
+                }
+
+                const seenSkus = new Set();
+                const rowsPayload = [];
+                parsedRows.forEach((row) => {
+                    const payload = buildRowPayload(row);
+                    if (!payload.sku && !payload.name) return;
+                    const errors = validateRow(payload);
+                    if (errors.length || seenSkus.has(payload.sku)) return;
+                    seenSkus.add(payload.sku);
+                    rowsPayload.push(payload);
+                });
+
+                if (rowsPayload.length === 0) {
+                    setStatus("No hay filas validas para importar.", "danger");
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                const originalText = submitBtn.textContent;
+                submitBtn.textContent = "Importando...";
+
+                try {
+                    const response = await fetch("/inventory/products/import", {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                            "X-Requested-With": "XMLHttpRequest",
+                            "X-CSRF-Token": csrfToken,
+                        },
+                        body: JSON.stringify({ _csrf: csrfToken, rows: rowsPayload }),
+                    });
+                    const data = await response.json().catch(() => ({}));
+
+                    if (response.ok && data.ok) {
+                        if (window.Swal) {
+                            await window.Swal.fire({
+                                title: "Importacion completada",
+                                html: `<p>Productos creados: <strong>${data.created || 0}</strong></p>${(data.errors || []).length ? `<p>Errores: ${data.errors.length}</p><ul style='text-align:left;max-height:160px;overflow:auto;font-size:.85rem;'>${data.errors.map(e => `<li>Fila ${e.row}: ${e.message}</li>`).join("")}</ul>` : ""}`,
+                                icon: (data.errors && data.errors.length) ? "warning" : "success",
+                                confirmButtonText: "Continuar",
+                                confirmButtonColor: "#2f6f68",
+                            });
+                        } else {
+                            window.alert(`Productos creados: ${data.created || 0}`);
+                        }
+                        window.location.reload();
+                    } else {
+                        setStatus(data.message || "No se pudo completar la importacion.", "danger");
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = originalText;
+                    }
+                } catch (error) {
+                    console.error(error);
+                    setStatus("Error de conexion al importar.", "danger");
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
+            });
+
+            const openTrigger = document.querySelector("[data-modal-open='inventory-import']");
+            if (openTrigger) {
+                openTrigger.addEventListener("click", () => {
+                    resetState();
+                    setStatus("Columnas reconocidas: SKU, Nombre, Categoria, Tipo, Unidad, Costo, Precio, Moneda, Stock inicial, Stock minimo, Descripcion. SKU y Nombre son obligatorios.", "muted");
+                });
+            }
+
+            resetState();
+        };
     })();
 </script>

@@ -11,6 +11,7 @@ use App\Controllers\InvoiceControllerModern as InvoiceController;
 use App\Controllers\ProductionControllerModern as ProductionController;
 use App\Controllers\PurchaseControllerModern as PurchaseController;
 use App\Controllers\RateController;
+use App\Controllers\ChartsController;
 use App\Controllers\ReportsControllerModern as ReportsController;
 use App\Controllers\ServiceControllerModern as ServiceController;
 use App\Controllers\SettingsController;
@@ -41,6 +42,7 @@ $router->post('/inventory/categories/{id}/delete', [InventoryController::class, 
 $router->post('/inventory/products', [InventoryController::class, 'storeProduct'], $admin);
 $router->post('/inventory/products/duplicate', [InventoryController::class, 'duplicateProduct'], $admin);
 $router->post('/inventory/products/variants', [InventoryController::class, 'createVariants'], $admin);
+$router->post('/inventory/products/import', [InventoryController::class, 'importProducts'], $admin);
 $router->post('/inventory/products/{id}', [InventoryController::class, 'updateProduct'], $admin);
 $router->post('/inventory/products/{id}/status', [InventoryController::class, 'toggleStatus'], $admin);
 $router->post('/inventory/products/{id}/delete', [InventoryController::class, 'softDelete'], $admin);
@@ -107,6 +109,8 @@ $router->post('/delivery-notes/cancel/{id}', [DeliveryNoteController::class, 'ca
 $router->get('/delivery-notes/print/{id}', [DeliveryNoteController::class, 'print'], $readOnly);
 $router->get('/delivery-notes/pdf/{id}', [DeliveryNoteController::class, 'pdf'], $readOnly);
 
+$router->get('/charts', [ChartsController::class, 'index'], $readOnly);
+$router->get('/charts/pdf', [ChartsController::class, 'pdf'], $readOnly);
 $router->get('/reports', [ReportsController::class, 'index'], $readOnly);
 $router->get('/reports/pdf', [ReportsController::class, 'pdf'], $readOnly);
 $router->get('/reports/inventory-charts/pdf', [ReportsController::class, 'inventoryChartsPdf'], $readOnly);

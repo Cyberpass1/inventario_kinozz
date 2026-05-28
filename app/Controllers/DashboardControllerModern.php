@@ -37,8 +37,8 @@ class DashboardControllerModern extends Controller
 
     private function dashboardPayload(): array
     {
-        $from = $this->sanitizeDate($_GET['from'] ?? date('Y-m-d', strtotime('-14 days')));
-        $to = $this->sanitizeDate($_GET['to'] ?? date('Y-m-d'));
+        $from = $this->sanitizeDate($_GET['from'] ?? date('Y-m-01'));
+        $to = $this->sanitizeDate($_GET['to'] ?? date('Y-m-t'));
 
         if (strtotime($from) > strtotime($to)) {
             [$from, $to] = [$to, $from];
@@ -47,7 +47,7 @@ class DashboardControllerModern extends Controller
         $dashboard = new Dashboard();
 
         return [
-            'stats' => $dashboard->stats(),
+            'stats' => $dashboard->stats($from, $to),
             'rate' => [
                 'rate' => system_exchange_rate($to),
                 'currency_from' => 'USD',

@@ -176,15 +176,18 @@
         }
 
         const collapsed = isDesktopViewport() && document.body.classList.contains("sidebar-collapsed");
+        const actionLabel = collapsed ? "Expandir menu lateral" : "Compactar menu lateral";
         sidebarToggleButton.setAttribute("aria-pressed", String(collapsed));
-        sidebarToggleButton.setAttribute("title", collapsed ? "Expandir menu lateral" : "Compactar menu lateral");
+        sidebarToggleButton.setAttribute("title", actionLabel);
+        sidebarToggleButton.setAttribute("aria-label", actionLabel);
 
         if (sidebarToggleLabel) {
-            sidebarToggleLabel.textContent = collapsed ? "Expandir menu" : "Compactar menu";
+            sidebarToggleLabel.textContent = collapsed ? "Expandir" : "Compactar";
         }
 
         if (sidebarToggleIcon) {
-            sidebarToggleIcon.innerHTML = collapsed ? "&raquo;" : "&laquo;";
+            sidebarToggleIcon.classList.remove("bi-chevron-double-left", "bi-chevron-double-right");
+            sidebarToggleIcon.classList.add(collapsed ? "bi-chevron-double-right" : "bi-chevron-double-left");
         }
     };
 
@@ -298,6 +301,70 @@
         link.addEventListener("click", () => closeMenu());
     });
 
+    const ALERT_CENTER_SEEN_KEY = "inventario.alertCenter.seen";
+    let alertCenterSeenThisSession = false;
+    try {
+        alertCenterSeenThisSession = window.sessionStorage.getItem(ALERT_CENTER_SEEN_KEY) === "1";
+    } catch (error) {
+        alertCenterSeenThisSession = false;
+    }
+
+    const markAlertCenterAsSeen = (toggle) => {
+        if (!toggle) return;
+        toggle.setAttribute("data-seen", "1");
+        if (!alertCenterSeenThisSession) {
+            alertCenterSeenThisSession = true;
+            try {
+                window.sessionStorage.setItem(ALERT_CENTER_SEEN_KEY, "1");
+            } catch (error) {
+                // sin sessionStorage seguimos solo con el flag en memoria
+            }
+        }
+    };
+
+    document.querySelectorAll("[data-alert-center]").forEach((shell) => {
+        const toggle = shell.querySelector("[data-alert-center-toggle]");
+        const panel = shell.querySelector("[data-alert-center-panel]");
+        if (!toggle || !panel) {
+            return;
+        }
+
+        if (alertCenterSeenThisSession) {
+            toggle.setAttribute("data-seen", "1");
+        }
+
+        const closePanel = () => {
+            panel.hidden = true;
+            toggle.setAttribute("aria-expanded", "false");
+        };
+        const openPanel = () => {
+            panel.hidden = false;
+            toggle.setAttribute("aria-expanded", "true");
+            markAlertCenterAsSeen(toggle);
+        };
+
+        toggle.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (panel.hidden) {
+                openPanel();
+            } else {
+                closePanel();
+            }
+        });
+
+        document.addEventListener("click", (event) => {
+            if (!shell.contains(event.target)) {
+                closePanel();
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !panel.hidden) {
+                closePanel();
+            }
+        });
+    });
+
     if (userMenuToggle && userMenuPanel && userMenuShell) {
         userMenuToggle.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -317,10 +384,136 @@
         });
     }
 
+    const restoreSubmitButton = (button) => {
+        if (!button) {
+            return;
+        }
+        if (button.dataset.originalText) {
+            button.textContent = button.dataset.originalText;
+            delete button.dataset.originalText;
+        }
+        button.disabled = false;
+        button.classList.remove("is-loading");
+    };
+
+    const setSubmitButtonLoading = (button) => {
+        if (!button || button.classList.contains("is-loading")) {
+            return;
+        }
+        button.dataset.originalText = button.textContent;
+        button.classList.add("is-loading");
+        button.textContent = "Procesando...";
+        button.disabled = true;
+    };
+
+    const showFormAlert = (title, message, icon = "warning") => {
+        const safeMessage = String(message || "Revisa los datos e intenta de nuevo.");
+        if (window.Swal) {
+            window.Swal.fire({
+                title: String(title || "Atencion"),
+                text: safeMessage,
+                icon,
+                confirmButtonText: "Entendido",
+                confirmButtonColor: "#2f6f68",
+            });
+        } else {
+            window.alert(safeMessage);
+        }
+    };
+
+    const DOCUMENT_PROMPT_KEY = "inventario.documentPrompt";
+    const stashDocumentPrompt = (prompt) => {
+        if (!prompt || !prompt.url) {
+            return;
+        }
+        try {
+            window.sessionStorage.setItem(DOCUMENT_PROMPT_KEY, JSON.stringify(prompt));
+        } catch (error) {
+            // Si no hay sessionStorage solo seguimos sin guardar el prompt
+        }
+    };
+
     document.querySelectorAll("form").forEach((form) => {
-        form.addEventListener("submit", () => {
+        form.addEventListener("submit", (event) => {
             const skipSubmitLoading = form.dataset.noSubmitLoading === "1"
                 || String(form.getAttribute("target") || "").toLowerCase() === "_blank";
+
+            if (form.dataset.ajaxForm === "1") {
+                event.preventDefault();
+
+                if (form.dataset.ajaxFormBusy === "1") {
+                    return;
+                }
+                form.dataset.ajaxFormBusy = "1";
+
+                const button = form.querySelector("button[type='submit'], button:not([type])");
+                if (button) {
+                    setSubmitButtonLoading(button);
+                }
+
+                const method = (form.method || "POST").toUpperCase();
+                const url = form.action || window.location.href;
+                const formData = new FormData(form);
+                const fetchOptions = {
+                    method,
+                    headers: {
+                        Accept: "application/json",
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    credentials: "same-origin",
+                };
+
+                if (method === "GET") {
+                    const params = new URLSearchParams(formData).toString();
+                    const separator = url.includes("?") ? "&" : "?";
+                    fetchOptions.url = params ? `${url}${separator}${params}` : url;
+                } else {
+                    fetchOptions.body = formData;
+                }
+
+                fetch(fetchOptions.url || url, fetchOptions)
+                    .then(async (response) => {
+                        let payload = {};
+                        try {
+                            payload = await response.json();
+                        } catch (error) {
+                            payload = {};
+                        }
+
+                        if (response.ok && (payload.ok === undefined || payload.ok === true)) {
+                            if (payload.document_prompt) {
+                                stashDocumentPrompt(payload.document_prompt);
+                            }
+                            const redirectTo = payload.redirect || form.dataset.ajaxFormRedirect;
+                            if (redirectTo) {
+                                window.location.href = redirectTo;
+                            } else {
+                                window.location.reload();
+                            }
+                            return;
+                        }
+
+                        delete form.dataset.ajaxFormBusy;
+                        restoreSubmitButton(button);
+                        showFormAlert(
+                            "No se pudo guardar",
+                            payload.message || "Revisa los datos del formulario e intenta de nuevo.",
+                            "warning",
+                        );
+                    })
+                    .catch(() => {
+                        delete form.dataset.ajaxFormBusy;
+                        restoreSubmitButton(button);
+                        showFormAlert(
+                            "Sin conexion",
+                            "No pudimos comunicarnos con el servidor. Verifica tu conexion e intenta de nuevo.",
+                            "error",
+                        );
+                    });
+
+                return;
+            }
+
             if (skipSubmitLoading) {
                 return;
             }
@@ -330,10 +523,7 @@
                 return;
             }
 
-            button.dataset.originalText = button.textContent;
-            button.classList.add("is-loading");
-            button.textContent = "Procesando...";
-            button.disabled = true;
+            setSubmitButtonLoading(button);
         });
     });
 
@@ -372,6 +562,46 @@
 
     document.querySelectorAll("[data-modal-close]").forEach((button) => {
         button.addEventListener("click", () => closeModal(button.closest(".modal-shell")));
+    });
+
+    document.querySelectorAll("form[data-logout-confirm]").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+            if (form.dataset.logoutConfirmed === "1") {
+                return;
+            }
+
+            event.preventDefault();
+
+            const triggerSubmit = () => {
+                form.dataset.logoutConfirmed = "1";
+                if (typeof form.requestSubmit === "function") {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            };
+
+            if (window.Swal) {
+                window.Swal.fire({
+                    title: "Cerrar sesion",
+                    text: "Vas a salir del sistema. Tus cambios sin guardar se perderan. Quieres continuar?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonText: "Si, cerrar sesion",
+                    cancelButtonText: "Cancelar",
+                    confirmButtonColor: "#b91c1c",
+                    cancelButtonColor: "#64748b",
+                    focusCancel: true,
+                    reverseButtons: true,
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        triggerSubmit();
+                    }
+                });
+            } else if (window.confirm("Cerrar sesion? Tus cambios sin guardar se perderan.")) {
+                triggerSubmit();
+            }
+        });
     });
 
     const buildCurrencyOptions = (documentCurrency, modal) => {
@@ -1366,7 +1596,7 @@
             : (rawLineValueKey === "price" ? "price" : "none");
         const lineValueLabel = shell.dataset.lineValueLabel || (lineValueKey === "cost" ? "Costo" : "Precio");
 
-        if (!list || !template || !addButton || !form || !summaryTitle || !summaryMeta || !summaryList || !catalogSelect || !catalogSearch || !catalogResults || !catalogStatus) {
+        if (!list || !template || !form || !summaryTitle || !summaryMeta || !summaryList || !catalogSelect || !catalogSearch || !catalogResults || !catalogStatus) {
             return;
         }
 
@@ -1838,10 +2068,12 @@
         setCatalogStatus(`Escribe al menos ${catalogMinChars} caracteres, SKU o nombre para buscar.`);
         catalogResults.innerHTML = "";
 
-        addButton.addEventListener("click", () => {
-            catalogSearch.focus();
-            catalogSearch.select();
-        });
+        if (addButton) {
+            addButton.addEventListener("click", () => {
+                catalogSearch.focus();
+                catalogSearch.select();
+            });
+        }
 
         list.addEventListener("input", renderSummary);
         list.addEventListener("change", renderSummary);
@@ -2343,12 +2575,15 @@
                 const original = lineItemsState
                     ? lineItemsState.subtotal
                     : convertCurrencyAmount(referenceTotal, sourceCurrency, currency, rate);
-                const converted = convertToBolivars(original, currency, rate);
+                const baseCurrencyPurchase = form.dataset.referenceCurrency || "USD";
+                const oppositeCurrencyPurchase = isBolivarCurrency(currency) ? baseCurrencyPurchase : secondaryCurrency;
+                const converted = convertCurrencyAmount(original, currency, oppositeCurrencyPurchase, rate);
                 const paymentApplied = convertCurrencyAmount(paymentAmount, paymentCurrency, currency, rate);
                 const remaining = Math.max(0, original - paymentApplied);
                 setText("[data-purchase-original]", original, form);
                 setText("[data-purchase-converted]", converted, form);
                 setNodeText("[data-purchase-total-currency]", normalizeCurrency(currency || secondaryCurrency), form);
+                setNodeText("[data-purchase-equivalent-label]", `Equiv. ${normalizeCurrency(oppositeCurrencyPurchase)}`, form);
                 setText("[data-line-count]", lineItemsState?.lineCount ?? 0, form);
                 setText("[data-line-quantity-total]", lineItemsState?.quantityTotal ?? 0, form);
                 setText("[data-payment-applied]", paymentApplied, form);
@@ -2379,7 +2614,9 @@
                     : convertCurrencyAmount(subtotalReference, sourceCurrency, currency, rate);
                 const tax = subtotal * (taxRate / 100);
                 const total = subtotal + tax;
-                const totalBolivars = convertToBolivars(total, currency, rate);
+                const baseCurrencyInvoice = form.dataset.referenceCurrency || "USD";
+                const oppositeCurrencyInvoice = isBolivarCurrency(currency) ? baseCurrencyInvoice : secondaryCurrency;
+                const totalEquivalent = convertCurrencyAmount(total, currency, oppositeCurrencyInvoice, rate);
                 const paymentApplied = convertCurrencyAmount(paymentAmount, paymentCurrency, currency, rate);
                 const remaining = Math.max(0, total - paymentApplied);
                 setText("[data-invoice-subtotal]", subtotal, form);
@@ -2387,7 +2624,8 @@
                 setText("[data-invoice-total]", total, form);
                 setText("[data-payment-applied]", paymentApplied, form);
                 setText("[data-payment-remaining]", remaining, form);
-                setText("[data-invoice-total-bolivars]", totalBolivars, form);
+                setText("[data-invoice-total-bolivars]", totalEquivalent, form);
+                setNodeText("[data-invoice-equivalent-label]", `Equiv. ${normalizeCurrency(oppositeCurrencyInvoice)}`, form);
                 setNodeText("[data-invoice-total-currency]", normalizeCurrency(currency || secondaryCurrency), form);
                 setText("[data-line-count]", lineItemsState?.lineCount ?? 0, form);
                 setText("[data-line-quantity-total]", lineItemsState?.quantityTotal ?? 0, form);
@@ -2404,13 +2642,16 @@
                 const original = lineItemsState
                     ? lineItemsState.subtotal
                     : convertCurrencyAmount(referenceTotal, sourceCurrency, currency, rate);
-                const converted = convertToBolivars(original, currency, rate);
+                const baseCurrencyDelivery = form.dataset.referenceCurrency || "USD";
+                const oppositeCurrencyDelivery = isBolivarCurrency(currency) ? baseCurrencyDelivery : secondaryCurrency;
+                const converted = convertCurrencyAmount(original, currency, oppositeCurrencyDelivery, rate);
                 const paymentApplied = convertCurrencyAmount(paymentAmount, paymentCurrency, currency, rate);
                 const remaining = Math.max(0, original - paymentApplied);
                 setText("[data-delivery-original]", original, form);
                 setText("[data-payment-applied]", paymentApplied, form);
                 setText("[data-payment-remaining]", remaining, form);
                 setText("[data-delivery-converted]", converted, form);
+                setNodeText("[data-delivery-equivalent-label]", `Equiv. ${normalizeCurrency(oppositeCurrencyDelivery)}`, form);
                 setNodeText("[data-delivery-total-currency]", normalizeCurrency(currency || secondaryCurrency), form);
                 setText("[data-line-count]", lineItemsState?.lineCount ?? 0, form);
                 setText("[data-line-quantity-total]", lineItemsState?.quantityTotal ?? 0, form);
@@ -2485,6 +2726,21 @@
 
     syncMenuState();
     syncSidebarState();
+
+    if (!window.__documentPrompt) {
+        try {
+            const stored = window.sessionStorage.getItem(DOCUMENT_PROMPT_KEY);
+            if (stored) {
+                window.sessionStorage.removeItem(DOCUMENT_PROMPT_KEY);
+                const parsed = JSON.parse(stored);
+                if (parsed && parsed.url) {
+                    window.__documentPrompt = parsed;
+                }
+            }
+        } catch (error) {
+            // sessionStorage no disponible o JSON invalido: ignoramos
+        }
+    }
 
     if (window.Swal && window.__documentPrompt && window.__documentPrompt.url) {
         const prompt = window.__documentPrompt;
@@ -2592,4 +2848,43 @@
     } else {
         initPosWorkspace();
     }
+})();
+
+// =====================================================
+// PWA: registro del service worker
+// =====================================================
+(function () {
+    "use strict";
+
+    if (!("serviceWorker" in navigator)) {
+        return;
+    }
+
+    const isSecure = window.isSecureContext
+        || ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (!isSecure) {
+        return;
+    }
+
+    const manifestLink = document.querySelector("link[rel='manifest']");
+    if (!manifestLink) {
+        return;
+    }
+
+    let basePath;
+    try {
+        const manifestUrl = new URL(manifestLink.href, window.location.href);
+        basePath = manifestUrl.pathname.replace(/manifest\.webmanifest$/, "");
+    } catch (error) {
+        basePath = "/";
+    }
+
+    const swUrl = basePath + "sw.js";
+    const scope = basePath;
+
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register(swUrl, { scope }).catch((error) => {
+            console.warn("PWA: no se pudo registrar el service worker", error);
+        });
+    });
 })();

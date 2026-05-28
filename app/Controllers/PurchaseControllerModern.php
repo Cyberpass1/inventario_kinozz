@@ -142,10 +142,26 @@ class PurchaseControllerModern extends Controller
                 (new Purchase())->registerPayment($purchaseId, $initialPayment);
             }
 
-            flash('success', $initialPayment !== null
+            $successMessage = $initialPayment !== null
                 ? 'Compra registrada, inventario actualizado y pago inicial aplicado.'
-                : 'Compra registrada e inventario actualizado. Puedes consultarla luego en la tabla.');
+                : 'Compra registrada e inventario actualizado. Puedes consultarla luego en la tabla.';
+
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => true,
+                    'message' => $successMessage,
+                    'redirect' => app_url('/purchases'),
+                ]);
+            }
+
+            flash('success', $successMessage);
         } catch (\Throwable $exception) {
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => false,
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
             flash('error', $exception->getMessage());
         }
 
@@ -167,8 +183,23 @@ class PurchaseControllerModern extends Controller
             [$header, $items] = $this->buildPurchasePayload($_POST, true);
 
             (new Purchase())->updatePurchase($purchaseId, $header, $items);
+
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => true,
+                    'message' => 'Compra actualizada correctamente.',
+                    'redirect' => app_url('/purchases'),
+                ]);
+            }
+
             flash('success', 'Compra actualizada correctamente.');
         } catch (\Throwable $exception) {
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => false,
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
             flash('error', $exception->getMessage());
         }
 
@@ -268,8 +299,22 @@ class PurchaseControllerModern extends Controller
             $paymentDate = (string) ($_POST['payment_date'] ?? date('Y-m-d'));
             (new Purchase())->registerPayment($purchaseId, $this->buildPaymentPayload($_POST, $purchase, $paymentDate));
 
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => true,
+                    'message' => 'Pago a proveedor registrado correctamente.',
+                    'redirect' => app_url('/purchases'),
+                ]);
+            }
+
             flash('success', 'Pago a proveedor registrado correctamente.');
         } catch (\Throwable $exception) {
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => false,
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
             flash('error', $exception->getMessage());
         }
 

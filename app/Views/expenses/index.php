@@ -3,7 +3,7 @@ $rateValue = (float) ($rate['rate'] ?? default_exchange_rate());
 ?>
 
 <section class="pos-workspace" data-pos-workspace>
-    <form method="post" action="/expenses" class="pos-form" data-calc="expense" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>">
+    <form method="post" action="/expenses" class="pos-form" data-calc="expense" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>" data-ajax-form="1">
         <?= csrf_field() ?>
 
         <header class="pos-topbar">
@@ -286,7 +286,7 @@ $rateValue = (float) ($rate['rate'] ?? default_exchange_rate());
                 </div>
                 <button type="button" class="modal-close" data-modal-close>&times;</button>
             </header>
-            <form method="post" action="/expenses/<?= (int) $expense['id'] ?>" class="form two-cols process-form" data-calc="expense" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>">
+            <form method="post" action="/expenses/<?= (int) $expense['id'] ?>" class="form two-cols process-form" data-calc="expense" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>" data-ajax-form="1">
                 <?= csrf_field() ?>
                 <label>Categoria
                     <select name="category_id">

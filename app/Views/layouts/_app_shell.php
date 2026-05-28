@@ -122,10 +122,8 @@ $navGroups = [
         'eyebrow' => 'Analitica',
         'title' => 'Reportes',
         'items' => [
-            ['label' => 'Dashboard de reportes', 'hint' => 'Metricas clave del negocio', 'href' => '/reports', 'mode' => 'exact'],
-            ['label' => 'Libro diario', 'hint' => 'Asientos por periodo', 'href' => '/reports/journal', 'mode' => 'prefix'],
-            ['label' => 'Libro mayor', 'hint' => 'Saldos y acumulados', 'href' => '/reports/ledger', 'mode' => 'prefix'],
-            ['label' => 'Balance general', 'hint' => 'Vista financiera consolidada', 'href' => '/reports/balance-sheet', 'mode' => 'prefix'],
+            ['label' => 'Reportes', 'hint' => 'Metricas clave y libros contables', 'href' => '/reports', 'mode' => 'prefix'],
+            ['label' => 'Graficas', 'hint' => 'Tendencias, comparativos y predicciones', 'href' => '/charts', 'mode' => 'prefix'],
         ],
     ],
 ];
@@ -151,6 +149,19 @@ foreach ($navGroups as $group) {
     }
 }
 $documentPrompt = flash('document_prompt');
+try {
+    $alertsSummary = (new \App\Models\Alerts())->summary();
+} catch (\Throwable $alertsException) {
+    $alertsSummary = ['total' => 0, 'groups' => []];
+}
+$alertGroupLabels = [
+    'stock' => ['Stock critico', 'bi-box-seam'],
+    'invoices_overdue' => ['Facturas vencidas', 'bi-receipt'],
+    'invoices_upcoming' => ['Facturas proximas a vencer', 'bi-clock-history'],
+    'deliveries_overdue' => ['Notas de entrega vencidas', 'bi-truck'],
+    'purchases_overdue' => ['Compras por pagar vencidas', 'bi-cart-x'],
+    'purchases_upcoming' => ['Compras proximas a vencer', 'bi-cart-check'],
+];
 $projectRoot = dirname(__DIR__, 3);
 $servedAssetsRoot = $projectRoot . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'assets';
 $cssPath = $servedAssetsRoot . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'app.css';
@@ -165,6 +176,16 @@ $assetsBaseUrl = asset_url();
     <meta charset="utf-8">
     <title><?= e($appName) ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="<?= e($appName) ?>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="<?= e($appName) ?>">
+    <link rel="icon" type="image/png" href="<?= e($assetsBaseUrl) ?>/img/Logo_System.png">
+    <link rel="shortcut icon" type="image/png" href="<?= e($assetsBaseUrl) ?>/img/Logo_System.png">
+    <link rel="apple-touch-icon" href="<?= e($assetsBaseUrl) ?>/img/Logo_System.png">
+    <link rel="manifest" href="<?= e(app_url('/manifest.webmanifest')) ?>">
     <script>
         (function () {
             var root = document.documentElement;
@@ -204,6 +225,69 @@ $assetsBaseUrl = asset_url();
                     <span class="eyebrow">Workspace</span>
                     <h1><?= e($appName) ?></h1>
                     <p><?= e(company()['name']) ?> </p>
+
+                    <div class="alert-center alert-center--brand" data-alert-center>
+                        <button
+                            type="button"
+                            class="alert-center-trigger"
+                            data-alert-center-toggle
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                            aria-label="Centro de alertas"
+                            title="Centro de alertas"
+                        >
+                            <i class="bi bi-bell" aria-hidden="true"></i>
+                            <?php if (($alertsSummary['total'] ?? 0) > 0): ?>
+                                <span class="alert-center-badge" data-alert-center-badge><?= (int) $alertsSummary['total'] ?></span>
+                            <?php endif; ?>
+                        </button>
+
+                        <div class="alert-center-panel" data-alert-center-panel hidden role="dialog" aria-label="Alertas activas">
+                            <div class="alert-center-head">
+                                <strong>Centro de alertas</strong>
+                                <span><?= (int) ($alertsSummary['total'] ?? 0) ?> activas</span>
+                            </div>
+
+                            <?php if (($alertsSummary['total'] ?? 0) === 0): ?>
+                                <div class="alert-center-empty">
+                                    <i class="bi bi-check-circle" aria-hidden="true"></i>
+                                    <p>Sin alertas. Todo en orden por ahora.</p>
+                                </div>
+                            <?php else: ?>
+                                <div class="alert-center-body">
+                                    <?php foreach (($alertsSummary['groups'] ?? []) as $groupKey => $items): ?>
+                                        <?php if (empty($items)) { continue; } ?>
+                                        <?php [$groupLabel, $groupIcon] = $alertGroupLabels[$groupKey] ?? ['Alertas', 'bi-bell']; ?>
+                                        <section class="alert-center-group">
+                                            <header>
+                                                <i class="bi <?= e($groupIcon) ?>" aria-hidden="true"></i>
+                                                <strong><?= e($groupLabel) ?></strong>
+                                                <span class="alert-center-count"><?= count($items) ?></span>
+                                            </header>
+                                            <ul>
+                                                <?php foreach ($items as $alert): ?>
+                                                    <li class="alert-center-item alert-center-item--<?= e($alert['severity'] ?? 'info') ?>">
+                                                        <a href="<?= e(app_url($alert['href'] ?? '/dashboard')) ?>">
+                                                            <span class="alert-center-dot" aria-hidden="true"></span>
+                                                            <div>
+                                                                <strong><?= e($alert['title'] ?? '') ?></strong>
+                                                                <small><?= e($alert['meta'] ?? '') ?></small>
+                                                            </div>
+                                                        </a>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </section>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <footer class="alert-center-foot">
+                                <a href="<?= e(app_url('/inventory')) ?>"><i class="bi bi-arrow-right-short" aria-hidden="true"></i> Inventario</a>
+                                <a href="<?= e(app_url('/invoices')) ?>">Cobros pendientes</a>
+                            </footer>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="nav-stack" id="app-navigation">
@@ -254,21 +338,32 @@ $assetsBaseUrl = asset_url();
                         <span class="sidebar-profile-edit" aria-hidden="true">&rsaquo;</span>
                     </a>
 
-                    <form method="post" action="/logout" class="sidebar-profile-logout">
-                        <?= csrf_field() ?>
-                        <button class="btn btn-outline" type="submit">Cerrar sesion</button>
-                    </form>
+                    <div class="sidebar-footer-actions">
+                        <form method="post" action="/logout" class="sidebar-profile-logout" data-logout-confirm data-no-submit-loading="1">
+                            <?= csrf_field() ?>
+                            <button
+                                class="btn btn-outline sidebar-icon-btn sidebar-logout-btn"
+                                type="submit"
+                                aria-label="Cerrar sesion"
+                                title="Cerrar sesion"
+                            >
+                                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                                <span class="sidebar-icon-btn-label">Salir</span>
+                            </button>
+                        </form>
 
-                    <button
-                        type="button"
-                        class="btn btn-outline sidebar-desktop-toggle btnCompactar"
-                        data-sidebar-toggle
-                        aria-pressed="false"
-                        title="Compactar menu lateral"
-                    >
-                        <span class="sidebar-desktop-toggle-icon" data-sidebar-toggle-icon>&laquo;</span>
-                        <span data-sidebar-toggle-label></span>
-                    </button>
+                        <button
+                            type="button"
+                            class="btn btn-outline sidebar-icon-btn sidebar-desktop-toggle btnCompactar"
+                            data-sidebar-toggle
+                            aria-pressed="false"
+                            aria-label="Compactar menu lateral"
+                            title="Compactar menu lateral"
+                        >
+                            <i class="bi bi-chevron-double-left sidebar-desktop-toggle-icon" data-sidebar-toggle-icon aria-hidden="true"></i>
+                            <span class="sidebar-icon-btn-label" data-sidebar-toggle-label>Compactar</span>
+                        </button>
+                    </div>
 
                 </div>
             </div>

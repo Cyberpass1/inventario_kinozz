@@ -68,7 +68,7 @@ $productOptionsMarkup = (static function (array $products): string {
 ?>
 
 <section class="pos-workspace" data-pos-workspace>
-    <form method="post" action="/purchases" class="pos-form" data-calc="purchase" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>" data-due-days="<?= e((string) $purchaseDueDays) ?>">
+    <form method="post" action="/purchases" class="pos-form" data-calc="purchase" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>" data-due-days="<?= e((string) $purchaseDueDays) ?>" data-ajax-form="1">
         <?= csrf_field() ?>
 
         <header class="pos-topbar">
@@ -305,7 +305,7 @@ $productOptionsMarkup = (static function (array $products): string {
                         <div><span>Unidades</span><strong data-line-quantity-total>0</strong></div>
                         <div><span>Pagas</span><strong data-payment-applied>0,00</strong></div>
                         <div><span>Restante</span><strong data-payment-remaining>0,00</strong></div>
-                        <div class="pos-total-grid-wide"><span>Equiv. Bs</span><strong data-purchase-converted>0,00</strong></div>
+                        <div class="pos-total-grid-wide"><span data-purchase-equivalent-label>Equiv. <?= e(secondary_currency()) ?></span><strong data-purchase-converted>0,00</strong></div>
                     </div>
                 </section>
 

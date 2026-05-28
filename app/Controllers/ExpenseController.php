@@ -89,8 +89,22 @@ class ExpenseController extends Controller
         try {
             (new Expense())->createRegistered($this->buildExpensePayload($_POST));
 
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => true,
+                    'message' => 'Gasto registrado.',
+                    'redirect' => app_url('/expenses'),
+                ]);
+            }
+
             flash('success', 'Gasto registrado.');
         } catch (\Throwable $exception) {
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => false,
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
             flash('error', $exception->getMessage());
         }
 
@@ -103,8 +117,23 @@ class ExpenseController extends Controller
 
         try {
             (new Expense())->updateRegistered((int) $id, $this->buildExpensePayload($_POST));
+
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => true,
+                    'message' => 'Gasto actualizado.',
+                    'redirect' => app_url('/expenses'),
+                ]);
+            }
+
             flash('success', 'Gasto actualizado.');
         } catch (\Throwable $exception) {
+            if ($this->wantsJson()) {
+                $this->json([
+                    'ok' => false,
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
             flash('error', $exception->getMessage());
         }
 

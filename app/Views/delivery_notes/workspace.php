@@ -268,7 +268,7 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
                         <div><span>Unidades</span><strong data-line-quantity-total>0</strong></div>
                         <div><span>Pagado</span><strong data-payment-applied>0,00</strong></div>
                         <div><span>Saldo</span><strong data-payment-remaining>0,00</strong></div>
-                        <div class="pos-total-grid-wide"><span>Equiv. Bs</span><strong data-delivery-converted>0,00</strong></div>
+                        <div class="pos-total-grid-wide"><span data-delivery-equivalent-label>Equiv. <?= e(secondary_currency()) ?></span><strong data-delivery-converted>0,00</strong></div>
                     </div>
                 </section>
 

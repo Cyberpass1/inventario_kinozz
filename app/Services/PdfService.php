@@ -560,6 +560,341 @@ class PdfService
         $pdf->Output('I', $this->safeFileName('graficas-inventario-' . $chart . '-' . $from . '-' . $to) . '.pdf');
     }
 
+    public function chartsReport(array $payload): void
+    {
+        $from = (string) ($payload['from'] ?? date('Y-m-01'));
+        $to = (string) ($payload['to'] ?? date('Y-m-d'));
+        $granularity = (string) ($payload['granularity'] ?? 'auto');
+        $granularityLabel = match ($granularity) {
+            'day' => 'Diaria',
+            'week' => 'Semanal',
+            'month' => 'Mensual',
+            default => 'Automatica',
+        };
+
+        $salesByPeriod = is_array($payload['salesByPeriod'] ?? null) ? $payload['salesByPeriod'] : ['labels' => [], 'values' => []];
+        $compareFlows = is_array($payload['compareFlows'] ?? null) ? $payload['compareFlows'] : ['labels' => [], 'sales' => [], 'purchases' => [], 'expenses' => []];
+        $topProducts = is_array($payload['topProducts'] ?? null) ? $payload['topProducts'] : [];
+        $topClients = is_array($payload['topClients'] ?? null) ? $payload['topClients'] : [];
+        $abc = is_array($payload['abc'] ?? null) ? $payload['abc'] : ['rows' => [], 'classCount' => ['A' => 0, 'B' => 0, 'C' => 0]];
+        $aging = is_array($payload['aging'] ?? null) ? $payload['aging'] : ['labels' => [], 'values' => [], 'total' => 0];
+        $paymentMethods = is_array($payload['paymentMethods'] ?? null) ? $payload['paymentMethods'] : ['labels' => [], 'values' => []];
+        $forecast = is_array($payload['forecast'] ?? null) ? $payload['forecast'] : ['labels' => [], 'historical' => [], 'trend' => [], 'forecast' => []];
+
+        $baseCurrency = (string) base_currency();
+        $secondaryCurrency = (string) secondary_currency();
+        $exchangeRate = (float) ($payload['exchange_rate'] ?? system_exchange_rate($to));
+
+        $totalSales = array_sum(array_map('floatval', $salesByPeriod['values'] ?? []));
+        $totalPurchases = array_sum(array_map('floatval', $compareFlows['purchases'] ?? []));
+        $totalExpenses = array_sum(array_map('floatval', $compareFlows['expenses'] ?? []));
+        $totalAging = (float) ($aging['total'] ?? 0);
+
+        $pdf = $this->makeDocument('Graficas analiticas', 'Resumen del periodo', 'L');
+        $this->renderMetaGrid($pdf, [
+            ['Periodo', $this->formatDate($from) . ' - ' . $this->formatDate($to)],
+            ['Granularidad', $granularityLabel],
+            ['Tasa vigente', '1 ' . $baseCurrency . ' = ' . $this->money($exchangeRate) . ' ' . $secondaryCurrency],
+            ['Documentos analizados', 'Facturas + notas de entrega + compras + gastos'],
+        ]);
+
+        $this->renderDashboardMetricCards($pdf, [
+            ['Ventas del periodo', $this->money(convert_currency_amount($totalSales, $secondaryCurrency, $baseCurrency, $exchangeRate)) . ' ' . $baseCurrency, $this->money($totalSales) . ' ' . $secondaryCurrency],
+            ['Compras del periodo', $this->money(convert_currency_amount($totalPurchases, $secondaryCurrency, $baseCurrency, $exchangeRate)) . ' ' . $baseCurrency, $this->money($totalPurchases) . ' ' . $secondaryCurrency],
+            ['Gastos del periodo', $this->money(convert_currency_amount($totalExpenses, $secondaryCurrency, $baseCurrency, $exchangeRate)) . ' ' . $baseCurrency, $this->money($totalExpenses) . ' ' . $secondaryCurrency],
+            ['Por cobrar al cierre', $this->money(convert_currency_amount($totalAging, $secondaryCurrency, $baseCurrency, $exchangeRate)) . ' ' . $baseCurrency, $this->money($totalAging) . ' ' . $secondaryCurrency],
+            ['Productos con venta', (string) count($abc['rows'] ?? []), 'Clase A: ' . (int) ($abc['classCount']['A'] ?? 0)],
+            ['Top clientes', (string) count($topClients), 'Clase B: ' . (int) ($abc['classCount']['B'] ?? 0)],
+        ]);
+
+        $this->renderDashboardLineChart(
+            $pdf,
+            'Ventas globales por periodo',
+            array_map('strval', $salesByPeriod['labels'] ?? []),
+            [
+                ['label' => 'Ventas', 'values' => array_map('floatval', $salesByPeriod['values'] ?? []), 'color' => [47, 111, 104]],
+            ],
+            'Granularidad ' . $granularityLabel . ' | montos en ' . $secondaryCurrency
+        );
+
+        $this->renderDashboardLineChart(
+            $pdf,
+            'Comparativo: Ventas vs Compras vs Gastos',
+            array_map('strval', $compareFlows['labels'] ?? []),
+            [
+                ['label' => 'Ventas', 'values' => array_map('floatval', $compareFlows['sales'] ?? []), 'color' => [47, 111, 104]],
+                ['label' => 'Compras', 'values' => array_map('floatval', $compareFlows['purchases'] ?? []), 'color' => [37, 99, 235]],
+                ['label' => 'Gastos', 'values' => array_map('floatval', $compareFlows['expenses'] ?? []), 'color' => [200, 149, 83]],
+            ],
+            'Montos en ' . $secondaryCurrency
+        );
+
+        // Fila: Top productos + Top clientes
+        $this->ensureSpace($pdf, 110);
+        $left = $pdf->getLeftMargin();
+        $top = $pdf->GetY();
+        $gap = 8.0;
+        $columnWidth = ($this->usableWidth($pdf) - $gap) / 2;
+        $chartHeight = 100.0;
+
+        $this->renderChartsRankingAt(
+            $pdf,
+            $left,
+            $top,
+            $columnWidth,
+            $chartHeight,
+            'Top productos',
+            'Por monto facturado (' . $secondaryCurrency . ')',
+            array_map(static fn (array $row): array => [
+                'label' => (string) ($row['name'] ?? 'Producto'),
+                'value' => (float) ($row['total'] ?? 0),
+                'meta' => number_format((float) ($row['quantity'] ?? 0), 2, ',', '.') . ' und.',
+            ], array_slice($topProducts, 0, 10)),
+            [47, 111, 104]
+        );
+
+        $this->renderChartsRankingAt(
+            $pdf,
+            $left + $columnWidth + $gap,
+            $top,
+            $columnWidth,
+            $chartHeight,
+            'Top clientes',
+            'Por facturacion (' . $secondaryCurrency . ')',
+            array_map(static fn (array $row): array => [
+                'label' => (string) ($row['name'] ?? 'Cliente'),
+                'value' => (float) ($row['total'] ?? 0),
+                'meta' => (int) ($row['documents'] ?? 0) . ' docs.',
+            ], array_slice($topClients, 0, 10)),
+            [96, 125, 155]
+        );
+
+        $pdf->SetY($top + $chartHeight + 7);
+
+        // ABC
+        $abcRows = $abc['rows'] ?? [];
+        $abcRowsForChart = array_map(static function (array $row): array {
+            $color = match ($row['class'] ?? 'C') {
+                'A' => [47, 111, 104],
+                'B' => [200, 149, 83],
+                default => [148, 163, 184],
+            };
+            return [
+                'label' => (string) ($row['name'] ?? ''),
+                'value' => (float) ($row['total'] ?? 0),
+                'meta' => 'Clase ' . ($row['class'] ?? 'C') . ' | ' . number_format(((float) ($row['cumulative'] ?? 0)) * 100, 1, ',', '.') . '% acum.',
+                'color' => $color,
+            ];
+        }, array_slice($abcRows, 0, 14));
+
+        $abcSubtitle = 'A: ' . (int) ($abc['classCount']['A'] ?? 0)
+            . ' | B: ' . (int) ($abc['classCount']['B'] ?? 0)
+            . ' | C: ' . (int) ($abc['classCount']['C'] ?? 0)
+            . ' | Montos en ' . $secondaryCurrency;
+
+        $this->ensureSpace($pdf, 120);
+        $left = $pdf->getLeftMargin();
+        $top = $pdf->GetY();
+        $abcWidth = $this->usableWidth($pdf);
+        $abcHeight = 110.0;
+        $this->renderChartsRankingAt(
+            $pdf,
+            $left,
+            $top,
+            $abcWidth,
+            $abcHeight,
+            'Analisis ABC',
+            $abcSubtitle,
+            $abcRowsForChart,
+            [47, 111, 104]
+        );
+        $pdf->SetY($top + $abcHeight + 7);
+
+        // Fila: Aging + Metodos de pago
+        $this->ensureSpace($pdf, 110);
+        $left = $pdf->getLeftMargin();
+        $top = $pdf->GetY();
+        $columnWidth = ($this->usableWidth($pdf) - $gap) / 2;
+        $chartHeight = 100.0;
+
+        $this->renderChartsCompositionAt(
+            $pdf,
+            $left,
+            $top,
+            $columnWidth,
+            $chartHeight,
+            'Antiguedad de cuentas por cobrar',
+            'Saldos pendientes al ' . $this->formatDate($to),
+            array_map('strval', $aging['labels'] ?? []),
+            array_map('floatval', $aging['values'] ?? []),
+            $secondaryCurrency,
+            $baseCurrency,
+            $exchangeRate,
+            [[47, 111, 104], [200, 149, 83], [217, 119, 6], [196, 95, 95], [127, 29, 29]]
+        );
+
+        $this->renderChartsCompositionAt(
+            $pdf,
+            $left + $columnWidth + $gap,
+            $top,
+            $columnWidth,
+            $chartHeight,
+            'Ventas por metodo de pago',
+            'Cobros aplicados en el periodo',
+            array_map('strval', $paymentMethods['labels'] ?? []),
+            array_map('floatval', $paymentMethods['values'] ?? []),
+            $secondaryCurrency,
+            $baseCurrency,
+            $exchangeRate,
+            [[47, 111, 104], [96, 125, 155], [200, 149, 83], [14, 165, 233], [168, 85, 247], [249, 115, 22]]
+        );
+
+        $pdf->SetY($top + $chartHeight + 7);
+
+        // Pronostico
+        $this->renderDashboardLineChart(
+            $pdf,
+            'Prediccion de ventas',
+            array_map('strval', $forecast['labels'] ?? []),
+            [
+                ['label' => 'Historico', 'values' => array_map(static fn ($v) => $v === null ? 0.0 : (float) $v, $forecast['historical'] ?? []), 'color' => [47, 111, 104]],
+                ['label' => 'Tendencia', 'values' => array_map(static fn ($v) => $v === null ? 0.0 : (float) $v, $forecast['trend'] ?? []), 'color' => [200, 149, 83]],
+                ['label' => 'Pronostico', 'values' => array_map(static fn ($v) => $v === null ? 0.0 : (float) $v, $forecast['forecast'] ?? []), 'color' => [196, 95, 95]],
+            ],
+            'Regresion lineal sobre 12 meses, proyectada 3 meses (' . $secondaryCurrency . ')'
+        );
+
+        // Detalle ABC en tabla
+        if ($abcRows !== []) {
+            $this->renderSectionTitle($pdf, 'Detalle del analisis ABC');
+            $this->renderTable(
+                $pdf,
+                ['#', 'Producto', 'SKU', 'Monto', '% individual', '% acumulado', 'Clase'],
+                [12, 88, 32, 38, 32, 32, 22],
+                array_map(static function (array $row, int $index): array {
+                    return [
+                        (string) ($index + 1),
+                        (string) ($row['name'] ?? ''),
+                        (string) ($row['sku'] ?? ''),
+                        number_format((float) ($row['total'] ?? 0), 2, ',', '.'),
+                        number_format(((float) ($row['share'] ?? 0)) * 100, 2, ',', '.') . '%',
+                        number_format(((float) ($row['cumulative'] ?? 0)) * 100, 2, ',', '.') . '%',
+                        (string) ($row['class'] ?? 'C'),
+                    ];
+                }, array_slice($abcRows, 0, 30), array_keys(array_slice($abcRows, 0, 30))),
+                ['C', 'L', 'L', 'R', 'R', 'R', 'C']
+            );
+        }
+
+        $pdf->Output('I', $this->safeFileName('graficas-' . $from . '-' . $to) . '.pdf');
+    }
+
+    private function renderChartsRankingAt(MinimalPdfDocument $pdf, float $x, float $y, float $width, float $height, string $title, string $subtitle, array $rows, array $defaultColor): void
+    {
+        $this->drawChartPanel($pdf, $x, $y, $width, $height, $title, $subtitle);
+
+        if ($rows === []) {
+            $this->drawEmptyChartMessage($pdf, $x, $y, $width, $height);
+            return;
+        }
+
+        $max = max(0.0, ...array_map(static fn (array $row): float => (float) ($row['value'] ?? 0), $rows));
+        if ($max <= 0.0) {
+            $this->drawEmptyChartMessage($pdf, $x, $y, $width, $height);
+            return;
+        }
+
+        $labelWidth = $width * 0.32;
+        $barX = $x + 6 + $labelWidth;
+        $barWidth = $width - $labelWidth - 18;
+        $availableHeight = max(40.0, $height - 24);
+        $rowHeight = max(5.6, min(9.5, $availableHeight / max(1, count($rows))));
+        $rowY = $y + 19;
+
+        foreach ($rows as $row) {
+            if ($rowY + $rowHeight > $y + $height - 3) {
+                break;
+            }
+
+            $value = (float) ($row['value'] ?? 0);
+            $color = is_array($row['color'] ?? null) ? $row['color'] : $defaultColor;
+            $fillWidth = $barWidth * ($value / $max);
+            $meta = (string) ($row['meta'] ?? '');
+            $valueText = $this->money($value);
+
+            $pdf->SetXY($x + 6, $rowY);
+            $pdf->SetFont('Helvetica', '', 7.4);
+            $pdf->SetTextColor(...self::C_TEXT_SOFT);
+            $pdf->Cell($labelWidth - 2, 4.2, $this->truncateText($pdf, (string) ($row['label'] ?? ''), $labelWidth - 3), 0, 0, 'L');
+
+            $pdf->SetFillColor(235, 239, 244);
+            $pdf->Rect($barX, $rowY + 0.6, $barWidth, 3.8, 'F');
+            $pdf->SetFillColor(...$color);
+            $pdf->Rect($barX, $rowY + 0.6, $fillWidth, 3.8, 'F');
+
+            $pdf->SetXY($barX, $rowY + 4.6);
+            $pdf->SetFont('Helvetica', '', 6.9);
+            $pdf->SetTextColor(...self::C_TEXT_SOFT);
+            $detail = $valueText . ($meta !== '' ? ' | ' . $meta : '');
+            $pdf->Cell($barWidth, 3, $this->truncateText($pdf, $detail, $barWidth - 1), 0, 0, 'R');
+
+            $rowY += $rowHeight;
+        }
+    }
+
+    private function renderChartsCompositionAt(MinimalPdfDocument $pdf, float $x, float $y, float $width, float $height, string $title, string $subtitle, array $labels, array $values, string $currency, string $referenceCurrency, float $rate, array $palette): void
+    {
+        $this->drawChartPanel($pdf, $x, $y, $width, $height, $title, $subtitle);
+
+        $sum = array_sum(array_map('floatval', $values));
+        if ($sum <= 0.0) {
+            $this->drawEmptyChartMessage($pdf, $x, $y, $width, $height);
+            return;
+        }
+
+        $barX = $x + 7;
+        $barY = $y + 22;
+        $barWidth = $width - 14;
+        $barHeight = 10;
+        $cursor = $barX;
+
+        foreach ($values as $index => $value) {
+            $segmentWidth = $barWidth * ((float) $value / $sum);
+            $pdf->SetFillColor(...($palette[$index % count($palette)]));
+            $pdf->Rect($cursor, $barY, $segmentWidth, $barHeight, 'F');
+            $cursor += $segmentWidth;
+        }
+
+        $pdf->SetDrawColor(...self::C_LINE);
+        $pdf->Rect($barX, $barY, $barWidth, $barHeight);
+
+        $rowY = $barY + 14;
+        foreach ($labels as $index => $label) {
+            $value = (float) ($values[$index] ?? 0);
+            $percent = $sum > 0 ? ($value / $sum) * 100 : 0;
+            $reference = convert_currency_amount($value, $currency, $referenceCurrency, $rate);
+
+            $pdf->SetFillColor(...($palette[$index % count($palette)]));
+            $pdf->Rect($barX, $rowY + 1.2, 3.2, 3.2, 'F');
+            $pdf->SetXY($barX + 5, $rowY);
+            $pdf->SetFont('Helvetica', '', 7.5);
+            $pdf->SetTextColor(...self::C_TEXT_SOFT);
+            $pdf->Cell($barWidth * 0.32, 5, $this->truncateText($pdf, (string) $label, ($barWidth * 0.32) - 1), 0, 0, 'L');
+            $pdf->SetFont('Helvetica', 'B', 7.5);
+            $pdf->SetTextColor(...self::C_TEXT);
+            $pdf->Cell($barWidth * 0.3, 5, $this->money($value) . ' ' . $currency, 0, 0, 'R');
+            $pdf->SetFont('Helvetica', '', 7);
+            $pdf->SetTextColor(...self::C_TEXT_SOFT);
+            $pdf->Cell($barWidth * 0.26, 5, '~ ' . $this->money($reference) . ' ' . $referenceCurrency, 0, 0, 'R');
+            $pdf->Cell($barWidth * 0.12, 5, number_format($percent, 1, ',', '.') . '%', 0, 1, 'R');
+
+            $rowY += 5.6;
+            if ($rowY > $y + $height - 3) {
+                break;
+            }
+        }
+    }
+
     private function inventoryChartRows(array $rows, string $mode, string $baseCurrency = '', string $secondaryCurrency = ''): array
     {
         return array_map(function (array $row) use ($mode, $baseCurrency, $secondaryCurrency): array {

@@ -8,23 +8,27 @@ use PDO;
 
 class Dashboard
 {
-    public function stats(): array
+    public function stats(?string $from = null, ?string $to = null): array
     {
         $db = Database::connection();
         $rate = system_exchange_rate(date('Y-m-d'));
         $baseCurrency = base_currency();
         $secondaryCurrency = secondary_currency();
         $expenseAmountSql = $this->expenseConsolidatedSql();
-        $queries = [
+
+        $hasPeriod = $from !== null && $to !== null;
+        $periodParams = $hasPeriod ? [$from, $to] : [];
+
+        $invoiceDateFilter = $hasPeriod ? ' AND invoice_date BETWEEN ? AND ?' : '';
+        $deliveryDateFilter = $hasPeriod ? ' AND note_date BETWEEN ? AND ?' : '';
+        $purchaseDateFilter = $hasPeriod ? ' AND purchase_date BETWEEN ? AND ?' : '';
+        $expenseDateFilter = $hasPeriod ? ' AND expense_date BETWEEN ? AND ?' : '';
+
+        // Metricas instantaneas (no dependen del periodo)
+        $snapshotQueries = [
             'products' => 'SELECT COUNT(*) total FROM products WHERE deleted_at IS NULL',
             'clients' => 'SELECT COUNT(*) total FROM clients',
             'suppliers' => 'SELECT COUNT(*) total FROM suppliers',
-            'expenses' => "SELECT COALESCE(SUM({$expenseAmountSql}), 0) total FROM expenses WHERE COALESCE(status, 'active') <> 'cancelled'",
-            'sales' => "SELECT (
-                    COALESCE((SELECT SUM(total_converted) FROM invoices WHERE COALESCE(status, 'active') <> 'cancelled'), 0)
-                    + COALESCE((SELECT SUM(total_converted) FROM delivery_notes WHERE COALESCE(status, 'active') <> 'cancelled'), 0)
-                ) AS total",
-            'purchases' => "SELECT COALESCE(SUM(total_converted), 0) total FROM purchases WHERE COALESCE(status, 'active') <> 'cancelled'",
             'receivables' => "SELECT (
                     COALESCE((SELECT SUM(balance_converted) FROM invoices WHERE COALESCE(status, 'active') <> 'cancelled'), 0)
                     + COALESCE((SELECT SUM(balance_converted) FROM delivery_notes WHERE COALESCE(status, 'active') <> 'cancelled'), 0)
@@ -33,9 +37,44 @@ class Dashboard
         ];
 
         $data = [];
-        foreach ($queries as $key => $sql) {
+        foreach ($snapshotQueries as $key => $sql) {
             $data[$key] = (float) $db->query($sql)->fetch()['total'];
         }
+
+        // Metricas dependientes del periodo
+        $expensesStmt = $db->prepare(
+            "SELECT COALESCE(SUM({$expenseAmountSql}), 0) total
+             FROM expenses
+             WHERE COALESCE(status, 'active') <> 'cancelled'"
+            . $expenseDateFilter
+        );
+        $expensesStmt->execute($periodParams);
+        $data['expenses'] = (float) $expensesStmt->fetch()['total'];
+
+        $documentTotalSql = $this->documentTotalVes();
+        $salesStmt = $db->prepare(
+            "SELECT (
+                COALESCE((SELECT SUM({$documentTotalSql}) FROM invoices
+                          WHERE COALESCE(status, 'active') <> 'cancelled'"
+            . $invoiceDateFilter
+            . "), 0)
+                + COALESCE((SELECT SUM({$documentTotalSql}) FROM delivery_notes
+                            WHERE COALESCE(status, 'active') <> 'cancelled'"
+            . $deliveryDateFilter
+            . "), 0)
+            ) AS total"
+        );
+        $salesStmt->execute(array_merge($periodParams, $periodParams));
+        $data['sales'] = (float) $salesStmt->fetch()['total'];
+
+        $purchasesStmt = $db->prepare(
+            "SELECT COALESCE(SUM({$documentTotalSql}), 0) total
+             FROM purchases
+             WHERE COALESCE(status, 'active') <> 'cancelled'"
+            . $purchaseDateFilter
+        );
+        $purchasesStmt->execute($periodParams);
+        $data['purchases'] = (float) $purchasesStmt->fetch()['total'];
 
         foreach (['expenses', 'sales', 'purchases', 'receivables', 'payables'] as $amountKey) {
             $data[$amountKey . '_base'] = convert_currency_amount(
@@ -93,17 +132,19 @@ class Dashboard
             $expenses[$date] = 0.0;
         }
 
+        $documentTotalSql = $this->documentTotalVes();
+
         $statement = $db->prepare(
             "SELECT dt, COALESCE(SUM(total), 0) total
              FROM (
-                SELECT invoice_date AS dt, total_converted AS total
+                SELECT invoice_date AS dt, {$documentTotalSql} AS total
                 FROM invoices
                 WHERE invoice_date BETWEEN ? AND ?
                   AND COALESCE(status, 'active') <> 'cancelled'
 
                 UNION ALL
 
-                SELECT note_date AS dt, total_converted AS total
+                SELECT note_date AS dt, {$documentTotalSql} AS total
                 FROM delivery_notes
                 WHERE note_date BETWEEN ? AND ?
                   AND COALESCE(status, 'active') <> 'cancelled'
@@ -119,7 +160,7 @@ class Dashboard
         }
 
         $statement = $db->prepare(
-            "SELECT purchase_date AS dt, COALESCE(SUM(total_converted), 0) total
+            "SELECT purchase_date AS dt, COALESCE(SUM({$documentTotalSql}), 0) total
              FROM purchases
              WHERE purchase_date BETWEEN ? AND ?
                AND COALESCE(status, 'active') <> 'cancelled'
@@ -267,6 +308,23 @@ class Dashboard
             WHEN UPPER(COALESCE({$prefix}currency_code, '')) IN ('VES', 'VEF', 'BS', 'BS.S', 'BSS', 'BOLIVARES')
                 THEN COALESCE({$prefix}amount_original, 0)
             ELSE COALESCE({$prefix}amount_converted, 0)
+        END";
+    }
+
+    /**
+     * Devuelve una expresion SQL que representa el total del documento en VES,
+     * usando total_converted cuando esta poblado y reconstruyendolo desde
+     * total_original + currency_code + exchange_rate cuando es 0 (datos legados).
+     */
+    private function documentTotalVes(string $alias = ''): string
+    {
+        $prefix = $alias !== '' ? rtrim($alias, '.') . '.' : '';
+
+        return "CASE
+            WHEN COALESCE({$prefix}total_converted, 0) > 0 THEN {$prefix}total_converted
+            WHEN UPPER(COALESCE({$prefix}currency_code, '')) IN ('VES', 'VEF', 'BS', 'BS.S', 'BSS', 'BOLIVARES')
+                THEN COALESCE({$prefix}total_original, 0)
+            ELSE COALESCE({$prefix}total_original, 0) * COALESCE({$prefix}exchange_rate, 0)
         END";
     }
 }

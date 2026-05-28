@@ -44,6 +44,51 @@ class Schema
         self::ensureUsersManagement($db);
         self::ensureSuppliersManagement($db);
         self::ensureTreasury($db);
+        self::ensureCreditNotes($db);
+    }
+
+    private static function ensureCreditNotes(PDO $db): void
+    {
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS credit_notes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                invoice_id INT NOT NULL,
+                credit_note_number VARCHAR(80) NOT NULL,
+                credit_note_date DATE NOT NULL,
+                currency_code VARCHAR(10) NOT NULL,
+                exchange_rate DECIMAL(14,4) NOT NULL DEFAULT 1,
+                subtotal_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                tax_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                subtotal_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                tax_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                reason VARCHAR(255) NULL,
+                notes TEXT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                cancelled_at DATETIME NULL,
+                cancellation_reason TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_credit_notes_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+            )"
+        );
+
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS credit_note_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                credit_note_id INT NOT NULL,
+                invoice_item_id INT NOT NULL,
+                product_id INT NOT NULL,
+                quantity DECIMAL(14,2) NOT NULL,
+                price_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                price_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                CONSTRAINT fk_credit_note_items_note FOREIGN KEY (credit_note_id) REFERENCES credit_notes(id) ON DELETE CASCADE,
+                CONSTRAINT fk_credit_note_items_invoice_item FOREIGN KEY (invoice_item_id) REFERENCES invoice_items(id),
+                CONSTRAINT fk_credit_note_items_product FOREIGN KEY (product_id) REFERENCES products(id)
+            )"
+        );
     }
 
     private static function ensureDocumentStatus(PDO $db, string $table): void
@@ -450,6 +495,9 @@ class Schema
             ['delivery_note_payments', 'treasury_account_id', 'ALTER TABLE delivery_note_payments ADD COLUMN treasury_account_id INT NULL'],
             ['expenses', 'payment_method', "ALTER TABLE expenses ADD COLUMN payment_method VARCHAR(40) NOT NULL DEFAULT 'cash'"],
             ['expenses', 'treasury_account_id', 'ALTER TABLE expenses ADD COLUMN treasury_account_id INT NULL'],
+            ['expenses', 'status', "ALTER TABLE expenses ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active'"],
+            ['expenses', 'cancelled_at', 'ALTER TABLE expenses ADD COLUMN cancelled_at DATETIME NULL'],
+            ['expenses', 'cancellation_reason', 'ALTER TABLE expenses ADD COLUMN cancellation_reason TEXT NULL'],
         ] as [$table, $column, $sql]) {
             if (!self::columnExists($db, $table, $column)) {
                 $db->exec($sql);

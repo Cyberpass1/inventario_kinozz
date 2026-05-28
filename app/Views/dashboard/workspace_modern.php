@@ -838,7 +838,7 @@ $reportLinks = [
             <article class="metric-card metric-card-soft">
                 <div class="metric-card-head">
                     <span>Ventas</span>
-                    <small>Periodo actual</small>
+                    <small>Del periodo</small>
                 </div>
                 <strong><?= money($salesBase) ?> <?= $baseCurrencyEscaped ?></strong>
                 <small class="currency-subtitle">~ <?= money($salesSecondary) ?> <?= $secondaryCurrency ?></small>
@@ -847,7 +847,7 @@ $reportLinks = [
             <article class="metric-card metric-card-blue">
                 <div class="metric-card-head">
                     <span>Compras</span>
-                    <small>Abastecimiento</small>
+                    <small>Del periodo</small>
                 </div>
                 <strong><?= money($purchasesBase) ?> <?= $baseCurrencyEscaped ?></strong>
                 <small class="currency-subtitle">~ <?= money($purchasesSecondary) ?> <?= $secondaryCurrency ?></small>
@@ -856,7 +856,7 @@ $reportLinks = [
             <article class="metric-card metric-card-gold">
                 <div class="metric-card-head">
                     <span>Gastos</span>
-                    <small>Operación</small>
+                    <small>Del periodo</small>
                 </div>
                 <strong><?= money($expensesBase) ?> <?= $baseCurrencyEscaped ?></strong>
                 <small class="currency-subtitle">~ <?= money($expensesSecondary) ?> <?= $secondaryCurrency ?></small>
@@ -1109,11 +1109,11 @@ if (flowCanvas) {
                     data: flowPurchases,
                     tension: 0.36,
                     fill: false,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    pointHoverRadius: 4,
-                    borderColor: "#607d9b",
-                    borderDash: [6, 5]
+                    borderWidth: 2.4,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: "#2563eb",
+                    borderColor: "#2563eb"
                 },
                 {
                     label: "Gastos",
