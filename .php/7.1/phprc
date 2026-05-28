@@ -1,0 +1,3 @@
+; {{{ Do not edit above or including this section. This section is managed by DreamHost.
+zend_extension=opcache.so
+; }}} That's all from DreamHost. Any settings changed below this line will supersede the above section

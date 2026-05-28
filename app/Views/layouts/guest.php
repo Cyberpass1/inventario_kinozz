@@ -1,0 +1,1 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title><?= e(env('APP_NAME','Sistema')) ?></title><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="<?= e(asset_url('css/app.css')) ?>"></head><body class="guest-body"><?= $content ?></body></html>

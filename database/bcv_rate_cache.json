@@ -1,0 +1,16 @@
+{
+    "fetched_at": 1779977351,
+    "date": "2026-05-28",
+    "source": "BCV oficial",
+    "rates": {
+        "USD": {
+            "rate": 544.5794,
+            "date": "2026-05-28"
+        },
+        "EUR": {
+            "rate": 633.482,
+            "date": "2026-05-28"
+        }
+    },
+    "errors": []
+}

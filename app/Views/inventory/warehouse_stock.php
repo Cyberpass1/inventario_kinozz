@@ -1,0 +1,1 @@
+<div class="page-title"><h2>Existencias por almacén</h2></div><div class="card"><table class="table"><thead><tr><th>Almacén</th><th>Producto</th><th>Stock</th></tr></thead><tbody><?php foreach($rows as $row): ?><tr><td><?= e($row['warehouse_name']) ?></td><td><?= e($row['product_name']) ?></td><td><?= money($row['stock']) ?></td></tr><?php endforeach; ?></tbody></table></div>
