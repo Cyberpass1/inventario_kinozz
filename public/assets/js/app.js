@@ -333,13 +333,39 @@
             toggle.setAttribute("data-seen", "1");
         }
 
+        const positionPanel = () => {
+            const rect = toggle.getBoundingClientRect();
+            const margin = 12;
+            const panelWidth = Math.min(380, window.innerWidth - margin * 2);
+            let left = rect.right - panelWidth;
+            if (left + panelWidth > window.innerWidth - margin) {
+                left = window.innerWidth - panelWidth - margin;
+            }
+            if (left < margin) {
+                left = margin;
+            }
+            panel.style.top = (rect.bottom + 10) + "px";
+            panel.style.left = left + "px";
+            panel.style.right = "auto";
+            panel.style.width = panelWidth + "px";
+        };
+
+        const onReposition = () => {
+            if (!panel.hidden) positionPanel();
+        };
+
         const closePanel = () => {
             panel.hidden = true;
             toggle.setAttribute("aria-expanded", "false");
+            window.removeEventListener("resize", onReposition);
+            window.removeEventListener("scroll", onReposition, true);
         };
         const openPanel = () => {
             panel.hidden = false;
             toggle.setAttribute("aria-expanded", "true");
+            positionPanel();
+            window.addEventListener("resize", onReposition);
+            window.addEventListener("scroll", onReposition, true);
             markAlertCenterAsSeen(toggle);
         };
 
@@ -353,9 +379,10 @@
         });
 
         document.addEventListener("click", (event) => {
-            if (!shell.contains(event.target)) {
-                closePanel();
-            }
+            if (panel.hidden) return;
+            if (shell.contains(event.target)) return;
+            if (panel.contains(event.target)) return;
+            closePanel();
         });
 
         document.addEventListener("keydown", (event) => {

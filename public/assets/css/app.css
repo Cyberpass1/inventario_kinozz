@@ -3988,9 +3988,7 @@ body.sidebar-collapsed .alert-center--brand {
 }
 
 .alert-center-panel {
-    position: absolute;
-    top: calc(100% + 10px);
-    right: 0;
+    position: fixed;
     width: min(380px, 92vw);
     max-height: min(70vh, 540px);
     overflow: hidden;
@@ -4000,7 +3998,7 @@ body.sidebar-collapsed .alert-center--brand {
     background: #fff;
     border: 1px solid rgba(15, 23, 42, 0.08);
     box-shadow: 0 22px 60px rgba(8, 21, 33, 0.18);
-    z-index: 80;
+    z-index: 1080;
 }
 
 .alert-center-panel[hidden] {
@@ -4161,7 +4159,6 @@ body.sidebar-collapsed .alert-center--brand {
 
 @media (max-width: 540px) {
     .alert-center-panel {
-        right: -0.5rem;
         width: calc(100vw - 1.5rem);
     }
 }

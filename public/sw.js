@@ -4,7 +4,7 @@
 // - Assets estaticos (css/js/img/fuentes): stale-while-revalidate
 // - Peticiones POST y de API: siempre network (no se cachean)
 
-const CACHE_VERSION = "kinozz-v1";
+const CACHE_VERSION = "kinozz-v2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
