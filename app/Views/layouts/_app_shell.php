@@ -86,6 +86,7 @@ $navGroups = [
         'eyebrow' => 'Ventas',
         'title' => 'Clientes y facturacion',
         'items' => [
+            ['label' => 'Cotizaciones', 'hint' => 'Propuestas y conversion comercial', 'href' => '/quotations', 'mode' => 'prefix'],
             ['label' => 'Facturas', 'hint' => 'Emision y seguimiento comercial', 'href' => '/invoices', 'mode' => 'prefix'],
             ['label' => 'Entregas', 'hint' => 'Despachos y salidas operativas', 'href' => '/delivery-notes', 'mode' => 'prefix'],
             ['label' => 'Clientes', 'hint' => 'Relacion comercial y contactos', 'href' => '/clients', 'mode' => 'prefix'],

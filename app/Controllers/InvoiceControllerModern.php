@@ -7,6 +7,7 @@ use App\Core\Controller;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\Product;
+use App\Models\Quotation;
 use App\Services\PdfService;
 
 class InvoiceControllerModern extends Controller
@@ -22,6 +23,7 @@ class InvoiceControllerModern extends Controller
         $rate = ['rate' => system_exchange_rate(date('Y-m-d')), 'currency_from' => 'USD', 'currency_to' => 'VES'];
         $invoiceDueDays = invoice_due_days();
         $historyExportQuery = $this->buildHistoryExportQuery($canFilterHistory, $historyFilters);
+        $quotationDraft = $this->quotationDraftForInvoice();
 
         $summary = [
             'operations' => count($invoices),
@@ -41,7 +43,7 @@ class InvoiceControllerModern extends Controller
             ),
         ];
 
-        $this->view('invoices/workspace', compact('invoices', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'invoiceDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole'), 'layouts/app_modern');
+        $this->view('invoices/workspace', compact('invoices', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'invoiceDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole', 'quotationDraft'), 'layouts/app_modern');
     }
 
     public function exportHistory(): void
@@ -151,6 +153,21 @@ class InvoiceControllerModern extends Controller
             $totalOriginal = round($subtotalOriginal + $taxOriginal, 2);
             $totalConverted = round($subtotalConverted + $taxConverted, 2);
             $initialPayment = null;
+            $sourceQuotationId = (int) ($_POST['source_quotation_id'] ?? 0);
+            $decreaseInventory = true;
+
+            if ($sourceQuotationId > 0) {
+                $sourceQuotation = (new Quotation())->findFull($sourceQuotationId);
+                if (! $sourceQuotation || ($sourceQuotation['status'] ?? 'open') === 'cancelled') {
+                    throw new \RuntimeException('La cotizacion de origen no esta disponible.');
+                }
+
+                if ((int) ($sourceQuotation['invoice_id'] ?? 0) > 0) {
+                    throw new \RuntimeException('Esta cotizacion ya tiene una factura generada.');
+                }
+
+                $decreaseInventory = (int) ($sourceQuotation['delivery_note_id'] ?? 0) <= 0;
+            }
 
             if (parse_money_input($_POST['payment_amount_original'] ?? 0) > 0) {
                 $initialPayment = $this->buildPaymentPayload($_POST, [
@@ -177,10 +194,14 @@ class InvoiceControllerModern extends Controller
                 'tax_converted' => $taxConverted,
                 'total_converted' => $totalConverted,
                 'notes' => trim($_POST['notes'] ?? ''),
-            ], $items);
+            ], $items, $decreaseInventory);
 
             if ($initialPayment !== null) {
                 (new Invoice())->registerPayment($invoiceId, $initialPayment);
+            }
+
+            if ($sourceQuotationId > 0) {
+                (new Quotation())->attachDocument($sourceQuotationId, 'invoice', $invoiceId);
             }
 
             $successMessage = 'Factura registrada. Puedes consultarla luego en la tabla.';
@@ -447,6 +468,54 @@ class InvoiceControllerModern extends Controller
             'applied_original' => $appliedOriginal,
             'applied_converted' => $appliedConverted,
             'notes' => trim((string) ($source['payment_notes'] ?? $source['notes'] ?? '')),
+        ];
+    }
+
+    private function quotationDraftForInvoice(): ?array
+    {
+        $quotationId = (int) ($_GET['from_quotation'] ?? 0);
+        if ($quotationId <= 0) {
+            return null;
+        }
+
+        $quotation = (new Quotation())->findFull($quotationId);
+        if (! $quotation) {
+            flash('error', 'Cotizacion no encontrada.');
+            return null;
+        }
+
+        if (($quotation['status'] ?? 'open') === 'cancelled') {
+            flash('error', 'No puedes facturar una cotizacion anulada.');
+            return null;
+        }
+
+        if ((int) ($quotation['invoice_id'] ?? 0) > 0) {
+            flash('error', 'Esta cotizacion ya tiene una factura generada.');
+            return null;
+        }
+
+        return $this->buildQuotationDraft($quotation);
+    }
+
+    private function buildQuotationDraft(array $quotation): array
+    {
+        $currency = (string) ($quotation['currency_code'] ?? secondary_currency());
+
+        return [
+            'id' => (int) ($quotation['id'] ?? 0),
+            'number' => (string) ($quotation['quotation_number'] ?? ''),
+            'client_id' => (int) ($quotation['client_id'] ?? 0),
+            'client_name' => (string) ($quotation['client_name'] ?? ''),
+            'client_document' => (string) ($quotation['client_document'] ?? ''),
+            'client_phone' => (string) ($quotation['client_phone'] ?? ''),
+            'currency_code' => $currency,
+            'notes' => trim('Generada desde cotizacion ' . (string) ($quotation['quotation_number'] ?? '') . "\n" . (string) ($quotation['notes'] ?? '')),
+            'items' => array_map(static fn (array $item): array => [
+                'product_id' => (int) ($item['product_id'] ?? 0),
+                'quantity' => (float) ($item['quantity'] ?? 0),
+                'price_original' => (float) ($item['price_original'] ?? 0),
+                'source_currency' => $currency,
+            ], is_array($quotation['items'] ?? null) ? $quotation['items'] : []),
         ];
     }
 

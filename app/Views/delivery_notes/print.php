@@ -40,6 +40,6 @@
 
     <div class="totals">
         <p><strong>Total documento: <?= money($note["total_original"] ?? 0) ?> <?= e($note["currency_code"] ?? base_currency()) ?></strong></p>
-        <p><strong>Total convertido (<?= e(base_currency()) ?>): <?= money($note["total_converted"] ?? 0) ?></strong></p>
+        <p><strong>Total convertido (<?= e(secondary_currency()) ?>): <?= money($note["total_converted"] ?? 0) ?></strong></p>
     </div>
 </div>

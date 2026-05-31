@@ -12,6 +12,18 @@ $historyFilters = is_array($historyFilters ?? null) ? $historyFilters : [
     'q' => '',
 ];
 $historyExportUrl = '/delivery-notes/export' . (string) ($historyExportQuery ?? '');
+$quotationDraft = is_array($quotationDraft ?? null) ? $quotationDraft : null;
+$draftCurrency = (string) ($quotationDraft['currency_code'] ?? secondary_currency());
+$draftItems = is_array($quotationDraft['items'] ?? null) ? $quotationDraft['items'] : [];
+$draftNotes = (string) ($quotationDraft['notes'] ?? '');
+$draftClientId = (int) ($quotationDraft['client_id'] ?? 0);
+$draftClientName = (string) ($quotationDraft['client_name'] ?? '');
+$draftClientDocument = (string) ($quotationDraft['client_document'] ?? '');
+$draftClientPhone = (string) ($quotationDraft['client_phone'] ?? '');
+$productsById = [];
+foreach ($products as $product) {
+    $productsById[(int) ($product['id'] ?? 0)] = $product;
+}
 $resolvePaymentStatus = static function (array $note): string {
     if (($note['status'] ?? 'active') === 'cancelled') {
         return 'cancelled';
@@ -61,8 +73,26 @@ $productOptionsMarkup = (static function (array $products): string {
     return trim((string) ob_get_clean());
 })($products);
 
-$renderNoteLine = static function (string $namePrefix) use ($productOptionsMarkup): void { ?>
-    <div class="line-item-card" data-line-item>
+$renderNoteLine = static function (string $namePrefix, array $item = [], array $productsById = [], string $documentCurrency = ''): void {
+    $productId = (int) ($item['product_id'] ?? 0);
+    $product = $productsById[$productId] ?? [];
+    $hasProduct = $productId > 0 && $product !== [];
+    $productName = $hasProduct ? (string) ($product['name'] ?? 'Producto') : 'Sin producto';
+    $sku = trim((string) ($product['sku'] ?? ''));
+    $stock = (float) ($product['stock'] ?? 0);
+    $productType = (string) ($product['product_type'] ?? 'merchandise');
+    $price = (float) ($item['price_original'] ?? 0);
+    $quantity = (float) ($item['quantity'] ?? 1);
+    $sourceCurrency = (string) ($item['source_currency'] ?? ($documentCurrency !== '' ? $documentCurrency : base_currency()));
+    $metaParts = $hasProduct ? [
+        $sku !== '' ? ('SKU ' . $sku) : 'SKU no definido',
+        'Stock ' . money($stock),
+    ] : ['Selecciona un producto o servicio.'];
+    if ($hasProduct && $price > 0) {
+        $metaParts[] = 'Precio ' . money($price);
+    }
+    ?>
+    <div class="line-item-card" data-line-item data-stock="<?= e((string) $stock) ?>" data-product-type="<?= e($productType) ?>">
         <div class="line-item-head">
             <div>
                 <strong data-line-label>Renglon 1</strong>
@@ -77,17 +107,17 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
             <div class="line-item-product">
                 <span class="line-item-caption">Producto</span>
                 <div class="line-item-identity">
-                    <strong data-line-product-name>Sin producto</strong>
-                    <small data-line-product-meta>Selecciona un producto o servicio.</small>
-                </div>
-                <input type="hidden" name="<?= e($namePrefix) ?>[product_id]" value="" data-line-product-id>
-                <input type="hidden" name="<?= e($namePrefix) ?>[source_currency]" value="<?= e(base_currency()) ?>" data-line-source-currency>
+                        <strong data-line-product-name><?= e($productName) ?></strong>
+                        <small data-line-product-meta><?= e(implode(' | ', $metaParts)) ?></small>
+                    </div>
+                <input type="hidden" name="<?= e($namePrefix) ?>[product_id]" value="<?= $productId > 0 ? (int) $productId : '' ?>" data-line-product-id>
+                <input type="hidden" name="<?= e($namePrefix) ?>[source_currency]" value="<?= e($sourceCurrency) ?>" data-line-source-currency>
             </div>
             <label><span data-line-qty-label>Cantidad</span>
-                <input type="number" step="1" min="1" name="<?= e($namePrefix) ?>[quantity]" value="1" required data-line-qty-input>
+                <input type="number" step="1" min="1" name="<?= e($namePrefix) ?>[quantity]" value="<?= e((string) $quantity) ?>" required data-line-qty-input>
             </label>
             <label><span data-line-price-label>Precio unitario</span>
-                <input type="number" step="0.01" min="0" name="<?= e($namePrefix) ?>[price_original]" value="0" required data-line-price-input>
+                <input type="number" step="0.01" min="0" name="<?= e($namePrefix) ?>[price_original]" value="<?= e((string) $price) ?>" required data-line-price-input>
                 <small data-line-price-help>Se convierte segun la moneda.</small>
             </label>
             <div class="line-item-metrics">
@@ -102,6 +132,9 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
 <section class="pos-workspace" data-pos-workspace>
     <form method="post" action="/delivery-notes" class="pos-form" data-calc="delivery-note" data-rate-sync="1" data-rate-url="<?= e(app_url('/rates/by-date')) ?>" data-reference-currency="<?= e(base_currency()) ?>" data-secondary-currency="<?= e(secondary_currency()) ?>" data-due-days="<?= e((string) $noteDueDays) ?>" data-ajax-form="1">
         <?= csrf_field() ?>
+        <?php if ($quotationDraft): ?>
+            <input type="hidden" name="source_quotation_id" value="<?= (int) $quotationDraft['id'] ?>">
+        <?php endif; ?>
 
         <header class="pos-topbar">
             <div class="pos-topbar-title">
@@ -123,15 +156,17 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
                         <span class="pos-hint">Ctrl + K</span>
                     </div>
                     <div class="client-search-shell pos-client" data-client-picker data-search-url="<?= e(app_url('/clients/search')) ?>" data-client-create-modal="client-note-modal">
-                        <input type="hidden" name="client_id" value="">
+                        <input type="hidden" name="client_id" value="<?= $draftClientId > 0 ? (int) $draftClientId : '' ?>">
                         <input
                             type="text"
                             class="pos-client-input"
-                            value=""
+                            value="<?= e($draftClientName) ?>"
                             placeholder="Nombre, cedula o documento..."
                             autocomplete="off"
                             data-client-search
                             data-pos-client-input
+                            data-client-document="<?= e($draftClientDocument) ?>"
+                            data-client-phone="<?= e($draftClientPhone) ?>"
                         >
                         <div class="client-search-panel" data-client-panel hidden>
                             <div class="client-search-status" data-client-status>Escribe 2+ letras o numeros para buscar.</div>
@@ -186,8 +221,8 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
                         </label>
                         <label>Moneda
                             <select name="currency_code" data-document-currency-select>
-                                <option value="<?= e(secondary_currency()) ?>" selected><?= e(secondary_currency()) ?></option>
-                                <option value="<?= e(base_currency()) ?>"><?= e(base_currency()) ?></option>
+                                <option value="<?= e(secondary_currency()) ?>" <?= $draftCurrency === secondary_currency() ? 'selected' : '' ?>><?= e(secondary_currency()) ?></option>
+                                <option value="<?= e(base_currency()) ?>" <?= $draftCurrency === base_currency() ? 'selected' : '' ?>><?= e(base_currency()) ?></option>
                             </select>
                         </label>
                         <label class="pos-meta-span">Tasa
@@ -201,7 +236,7 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
                     <summary>Notas y observaciones</summary>
                     <div class="pos-notes-grid">
                         <label>Notas
-                            <textarea name="notes" placeholder="Detalle breve de la salida, condicion de entrega o referencia interna"></textarea>
+                            <textarea name="notes" placeholder="Detalle breve de la salida, condicion de entrega o referencia interna"><?= e($draftNotes) ?></textarea>
                         </label>
                         <label>Notas del pago
                             <textarea name="payment_notes" placeholder="Banco, soporte o aclaracion del cobro inicial"></textarea>
@@ -244,7 +279,11 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
                         <div class="line-items-summary-list" data-line-summary-list></div>
                     </div>
 
-                    <div class="pos-items-list line-items-list" data-line-items-list></div>
+                    <div class="pos-items-list line-items-list" data-line-items-list>
+                        <?php foreach ($draftItems as $index => $draftItem): ?>
+                            <?php $renderNoteLine('items[' . (int) $index . ']', $draftItem, $productsById, $draftCurrency); ?>
+                        <?php endforeach; ?>
+                    </div>
                     <div class="pos-items-empty" data-pos-items-empty>
                         <strong>Sin productos agregados</strong>
                         <span>Usa el buscador o pulsa <kbd>/</kbd> para empezar.</span>
@@ -454,7 +493,8 @@ $renderNoteLine = static function (string $namePrefix) use ($productOptionsMarku
                                 </div>
                             </td>
                             <td data-label="Acciones" class="actions-row document-actions">
-                                <a class="btn btn-sm btn-pdf" href="/delivery-notes/pdf/<?= $note['id'] ?>" target="_blank" rel="noopener noreferrer">PDF</a>
+                                <a class="btn btn-sm btn-pdf" href="/delivery-notes/pdf/<?= $note['id'] ?>?currency=<?= e(secondary_currency()) ?>" target="_blank" rel="noopener noreferrer">PDF <?= e(secondary_currency()) ?></a>
+                                <a class="btn btn-sm btn-outline" href="/delivery-notes/pdf/<?= $note['id'] ?>?currency=<?= e(base_currency()) ?>" target="_blank" rel="noopener noreferrer">PDF <?= e(base_currency()) ?></a>
                                 <?php if ($canRegisterCollection && ($note['status'] ?? 'active') !== 'cancelled' && (float) ($note['balance_converted'] ?? 0) > 0.01): ?>
                                     <button
                                         type="button"

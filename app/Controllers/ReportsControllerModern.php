@@ -59,6 +59,9 @@ class ReportsControllerModern extends Controller
             'treasuryMovements' => $payload['treasuryMovements'] ?? [],
             'productSummary' => $payload['productSummary'] ?? [],
             'productSummaryOverview' => $payload['productSummaryOverview'] ?? [],
+            'productSummaryProducts' => $payload['productSummaryProducts'] ?? [],
+            'productSummaryServices' => $payload['productSummaryServices'] ?? [],
+            'serviceSummaryOverview' => $payload['serviceSummaryOverview'] ?? [],
         ], 'layouts/app_modern');
     }
 
@@ -363,9 +366,19 @@ class ReportsControllerModern extends Controller
                 'unit_label' => (string) ($row['unit_label'] ?? ''),
                 'product_type' => (string) ($row['product_type'] ?? 'merchandise'),
             ]),
+            'product_type' => (string) ($row['product_type'] ?? 'merchandise'),
+            'type_label' => product_type_label((string) ($row['product_type'] ?? 'merchandise')),
             'quantity' => (float) ($row['total_quantity'] ?? 0),
             'document_count' => (int) ($row['document_count'] ?? 0),
         ], $reports->salesProductQuantities($from, $to));
+        $productItems = array_values(array_filter(
+            $productSummary,
+            static fn (array $row): bool => (string) ($row['product_type'] ?? 'merchandise') !== 'service'
+        ));
+        $serviceItems = array_values(array_filter(
+            $productSummary,
+            static fn (array $row): bool => (string) ($row['product_type'] ?? 'merchandise') === 'service'
+        ));
 
         $payload = $this->buildDocumentsPayload(
             'Ventas',
@@ -375,11 +388,16 @@ class ReportsControllerModern extends Controller
             $currentRate
         );
 
-        $totalQuantity = array_reduce($productSummary, fn (float $carry, array $row): float => $carry + (float) ($row['quantity'] ?? 0), 0.0);
-        $productCount = count($productSummary);
-        $leadProduct = $productSummary[0] ?? null;
+        $totalQuantity = array_reduce($productItems, fn (float $carry, array $row): float => $carry + (float) ($row['quantity'] ?? 0), 0.0);
+        $serviceQuantity = array_reduce($serviceItems, fn (float $carry, array $row): float => $carry + (float) ($row['quantity'] ?? 0), 0.0);
+        $productCount = count($productItems);
+        $serviceCount = count($serviceItems);
+        $leadProduct = $productItems[0] ?? null;
+        $leadService = $serviceItems[0] ?? null;
 
         $payload['productSummary'] = $productSummary;
+        $payload['productSummaryProducts'] = $productItems;
+        $payload['productSummaryServices'] = $serviceItems;
         $payload['productSummaryOverview'] = [
             'total_quantity' => $totalQuantity,
             'product_count' => $productCount,
@@ -387,8 +405,16 @@ class ReportsControllerModern extends Controller
             'lead_quantity' => (float) ($leadProduct['quantity'] ?? 0),
             'lead_unit_label' => (string) ($leadProduct['unit_label'] ?? 'und'),
         ];
-        $payload['summaryCards'][] = $this->summaryCard('Unidades vendidas', money($totalQuantity), 'Suma de cantidades facturadas en el periodo.');
+        $payload['serviceSummaryOverview'] = [
+            'total_quantity' => $serviceQuantity,
+            'service_count' => $serviceCount,
+            'lead_service' => (string) ($leadService['product_label'] ?? ''),
+            'lead_quantity' => (float) ($leadService['quantity'] ?? 0),
+            'lead_unit_label' => (string) ($leadService['unit_label'] ?? 'serv'),
+        ];
+        $payload['summaryCards'][] = $this->summaryCard('Unidades de productos', money($totalQuantity), 'Suma de cantidades facturadas solo para productos.');
         $payload['summaryCards'][] = $this->summaryCard('Productos vendidos', (string) $productCount, 'Productos distintos con salida en facturacion.');
+        $payload['summaryCards'][] = $this->summaryCard('Servicios facturados', (string) $serviceCount, 'Servicios distintos facturados en el periodo.');
         if ($leadProduct !== null) {
             $payload['infoCards'][] = $this->summaryCard(
                 'Producto lider',
@@ -397,11 +423,19 @@ class ReportsControllerModern extends Controller
                 . (string) ($leadProduct['product_label'] ?? '')
             );
         }
-        $payload['pdfSummary'][] = ['Unidades vendidas', money($totalQuantity)];
+        if ($leadService !== null) {
+            $payload['infoCards'][] = $this->summaryCard(
+                'Servicio lider',
+                money((float) ($leadService['quantity'] ?? 0)) . ' ' . (string) ($leadService['unit_label'] ?? 'serv'),
+                (((string) ($leadService['sku'] ?? '')) !== '' ? 'SKU ' . (string) ($leadService['sku'] ?? '') . ' | ' : '')
+                . (string) ($leadService['product_label'] ?? '')
+            );
+        }
+        $payload['pdfSummary'][] = ['Unidades de productos', money($totalQuantity)];
         $payload['pdfSummary'][] = ['Productos vendidos', (string) $productCount];
-        $payload['pdfSections'] = $productSummary === []
-            ? []
-            : [[
+        $payload['pdfSummary'][] = ['Servicios facturados', (string) $serviceCount];
+        $payload['pdfSections'] = array_values(array_filter([
+            $productItems === [] ? null : [
                 'title' => 'Cantidades vendidas por producto',
                 'headers' => ['SKU', 'Producto', 'Unidad', 'Cantidad', 'Facturas'],
                 'widths' => [28, 86, 18, 24, 20],
@@ -412,12 +446,30 @@ class ReportsControllerModern extends Controller
                     (string) ($row['unit_label'] ?? 'und'),
                     money($row['quantity'] ?? 0),
                     (string) ($row['document_count'] ?? 0),
-                ], $productSummary),
+                ], $productItems),
                 'summary' => [
-                    ['Unidades vendidas', money($totalQuantity)],
+                    ['Unidades de productos', money($totalQuantity)],
                     ['Productos vendidos', (string) $productCount],
                 ],
-            ]];
+            ],
+            $serviceItems === [] ? null : [
+                'title' => 'Servicios facturados',
+                'headers' => ['Codigo', 'Servicio', 'Unidad', 'Cantidad', 'Facturas'],
+                'widths' => [28, 86, 18, 24, 20],
+                'alignments' => ['L', 'L', 'L', 'R', 'R'],
+                'rows' => array_map(fn (array $row): array => [
+                    (string) ($row['sku'] !== '' ? $row['sku'] : 'Sin SKU'),
+                    (string) ($row['product_label'] ?? ''),
+                    (string) ($row['unit_label'] ?? 'serv'),
+                    money($row['quantity'] ?? 0),
+                    (string) ($row['document_count'] ?? 0),
+                ], $serviceItems),
+                'summary' => [
+                    ['Unidades de servicio', money($serviceQuantity)],
+                    ['Servicios facturados', (string) $serviceCount],
+                ],
+            ],
+        ]));
 
         return $payload;
     }

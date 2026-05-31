@@ -90,6 +90,7 @@ class Invoice
                     i.created_at,
                     i.status,
                     i.payment_status,
+                    i.stock_effect_applied,
                     i.cancelled_at,
                     i.cancellation_reason,
                     c.name,
@@ -112,7 +113,7 @@ class Invoice
         return 'FAC-' . str_pad((string) (((int) ($row['id'] ?? 0)) + 1), 6, '0', STR_PAD_LEFT);
     }
 
-    public function create(array $header, array $items): int
+    public function create(array $header, array $items, bool $decreaseInventory = true): int
     {
         $db = Database::connection();
         $db->beginTransaction();
@@ -120,8 +121,8 @@ class Invoice
         try {
             $statement = $db->prepare(
                 'INSERT INTO invoices
-                    (client_id, invoice_number, invoice_date, due_date, currency_code, exchange_rate, subtotal_original, tax_original, total_original, amount_paid_original, balance_original, subtotal_converted, tax_converted, total_converted, amount_paid_converted, balance_converted, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    (client_id, invoice_number, invoice_date, due_date, currency_code, exchange_rate, subtotal_original, tax_original, total_original, amount_paid_original, balance_original, subtotal_converted, tax_converted, total_converted, amount_paid_converted, balance_converted, notes, stock_effect_applied)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $statement->execute([
                 $header['client_id'],
@@ -141,6 +142,7 @@ class Invoice
                 0,
                 $header['total_converted'],
                 $header['notes'] ?? null,
+                $decreaseInventory ? 1 : 0,
             ]);
 
             $invoiceId = (int) $db->lastInsertId();
@@ -162,7 +164,7 @@ class Invoice
                 ]);
 
                 $product = (new Product())->findVisible((int) $item['product_id']);
-                if ($product && product_tracks_inventory($product)) {
+                if ($decreaseInventory && $product && product_tracks_inventory($product)) {
                     Inventory::decrease(
                         (int) $item['product_id'],
                         (float) $item['quantity'],
@@ -199,7 +201,7 @@ class Invoice
             }
 
             foreach ($invoice['items'] as $item) {
-                if (product_tracks_inventory((string) ($item['product_type'] ?? 'merchandise'))) {
+                if ((int) ($invoice['stock_effect_applied'] ?? 1) === 1 && product_tracks_inventory((string) ($item['product_type'] ?? 'merchandise'))) {
                     Inventory::increase(
                         (int) $item['product_id'],
                         (float) $item['quantity'],
@@ -360,10 +362,16 @@ class Invoice
             throw new \RuntimeException('Factura no encontrada.');
         }
 
-        $paidOriginal = round_money(min((float) ($row['total_original'] ?? 0), (float) ($totals['paid_original'] ?? 0)));
-        $paidConverted = round_money(min((float) ($row['total_converted'] ?? 0), (float) ($totals['paid_converted'] ?? 0)));
-        $balanceOriginal = round_money(max(0.0, (float) ($row['total_original'] ?? 0) - $paidOriginal));
-        $balanceConverted = round_money(max(0.0, (float) ($row['total_converted'] ?? 0) - $paidConverted));
+        $normalized = normalize_payment_totals(
+            $row['total_original'] ?? 0,
+            $row['total_converted'] ?? 0,
+            $totals['paid_original'] ?? 0,
+            $totals['paid_converted'] ?? 0
+        );
+        $paidOriginal = $normalized['paid_original'];
+        $paidConverted = $normalized['paid_converted'];
+        $balanceOriginal = $normalized['balance_original'];
+        $balanceConverted = $normalized['balance_converted'];
         $paymentStatus = $this->resolvePaymentStatus([
             ...$row,
             'amount_paid_original' => $paidOriginal,
@@ -415,27 +423,26 @@ class Invoice
     private function applyEffectivePaymentState(array $invoice): array
     {
         $payments = is_array($invoice['payments'] ?? null) ? $invoice['payments'] : [];
-        $paidOriginal = round_money(min(
-            (float) ($invoice['total_original'] ?? 0),
+        $normalized = normalize_payment_totals(
+            $invoice['total_original'] ?? 0,
+            $invoice['total_converted'] ?? 0,
             array_reduce(
                 $payments,
                 static fn (float $carry, array $payment): float => $carry + (float) ($payment['applied_original'] ?? 0),
                 0.0
-            )
-        ));
-        $paidConverted = round_money(min(
-            (float) ($invoice['total_converted'] ?? 0),
+            ),
             array_reduce(
                 $payments,
                 static fn (float $carry, array $payment): float => $carry + (float) ($payment['applied_converted'] ?? 0),
                 0.0
             )
-        ));
-
+        );
+        $paidOriginal = $normalized['paid_original'];
+        $paidConverted = $normalized['paid_converted'];
         $invoice['amount_paid_original'] = $paidOriginal;
         $invoice['amount_paid_converted'] = $paidConverted;
-        $invoice['balance_original'] = round_money(max(0.0, (float) ($invoice['total_original'] ?? 0) - $paidOriginal));
-        $invoice['balance_converted'] = round_money(max(0.0, (float) ($invoice['total_converted'] ?? 0) - $paidConverted));
+        $invoice['balance_original'] = $normalized['balance_original'];
+        $invoice['balance_converted'] = $normalized['balance_converted'];
         $invoice['payment_status'] = $this->resolvePaymentStatus($invoice, false);
 
         return $invoice;

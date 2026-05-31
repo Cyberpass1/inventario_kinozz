@@ -16,7 +16,10 @@ $inventoryRecap = is_array($inventoryRecap ?? null) ? $inventoryRecap : [];
 $balanceOverview = is_array($balanceOverview ?? null) ? $balanceOverview : [];
 $treasuryMovements = is_array($treasuryMovements ?? null) ? $treasuryMovements : [];
 $productSummary = is_array($productSummary ?? null) ? $productSummary : [];
+$productSummaryProducts = is_array($productSummaryProducts ?? null) ? $productSummaryProducts : [];
+$productSummaryServices = is_array($productSummaryServices ?? null) ? $productSummaryServices : [];
 $productSummaryOverview = is_array($productSummaryOverview ?? null) ? $productSummaryOverview : [];
+$serviceSummaryOverview = is_array($serviceSummaryOverview ?? null) ? $serviceSummaryOverview : [];
 $toReference = static fn (float $amount): string => '~ ' . money(convert_currency_amount($amount, $secondaryCurrency, $baseCurrency, $currentRate)) . ' ' . $baseCurrency;
 $paymentStatusLabel = static fn (string $status): string => match ($status) {
     'paid' => 'Pagada',
@@ -563,59 +566,96 @@ $reportLinks = [
     </article>
 <?php endif; ?>
 
-<?php if ($type === 'sales' && $productSummary): ?>
+<?php if ($type === 'sales' && ($productSummaryProducts || $productSummaryServices)): ?>
     <article class="card">
         <header class="section-head">
             <div>
-                <h3>Cantidades vendidas por producto</h3>
-                <p>Resumen de unidades facturadas en el periodo. Aqui podras ver rapido cuantas franelas u otros productos salieron por facturacion.</p>
+                <h3>Cantidades facturadas</h3>
+                <p>Resumen separado entre productos fisicos y servicios para que cada salida comercial conserve su naturaleza.</p>
             </div>
         </header>
 
         <div class="kpi-strip">
             <div class="kpi-pill">
                 <div>
-                    <span>Unidades vendidas</span>
+                    <span>Unidades de productos</span>
                     <strong><?= money((float) ($productSummaryOverview['total_quantity'] ?? 0)) ?></strong>
-                    <small>Suma total facturada en el rango.</small>
+                    <small>Suma facturada solo de productos.</small>
                 </div>
             </div>
             <div class="kpi-pill">
                 <div>
                     <span>Productos vendidos</span>
-                    <strong><?= (int) ($productSummaryOverview['product_count'] ?? count($productSummary)) ?></strong>
-                    <small>Productos distintos con salida.</small>
+                    <strong><?= (int) ($productSummaryOverview['product_count'] ?? count($productSummaryProducts)) ?></strong>
+                    <small>Productos distintos con salida fisica.</small>
                 </div>
             </div>
             <div class="kpi-pill">
                 <div>
-                    <span>Producto lider</span>
-                    <strong><?= e((string) ($productSummaryOverview['lead_product'] ?? 'Sin datos')) ?></strong>
-                    <small><?= money((float) ($productSummaryOverview['lead_quantity'] ?? 0)) ?> <?= e((string) ($productSummaryOverview['lead_unit_label'] ?? 'und')) ?></small>
+                    <span>Servicios facturados</span>
+                    <strong><?= (int) ($serviceSummaryOverview['service_count'] ?? count($productSummaryServices)) ?></strong>
+                    <small><?= money((float) ($serviceSummaryOverview['total_quantity'] ?? 0)) ?> unidades de servicio.</small>
                 </div>
             </div>
         </div>
 
-        <div class="table-wrap">
-            <table class="table mobile-cards">
-                <thead>
-                    <tr>
-                        <th>SKU</th><th>Producto</th><th>Unidad</th><th>Cantidad vendida</th><th>Facturas</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($productSummary as $row): ?>
+        <?php if ($productSummaryProducts): ?>
+            <header class="section-head">
+                <div>
+                    <h3>Productos vendidos</h3>
+                    <p>Cantidades de productos fisicos facturados en el periodo.</p>
+                </div>
+            </header>
+            <div class="table-wrap">
+                <table class="table mobile-cards">
+                    <thead>
                         <tr>
-                            <td data-label="SKU"><?= e($row['sku'] !== '' ? $row['sku'] : 'Sin SKU') ?></td>
-                            <td data-label="Producto"><?= e($row['product_label'] ?? '') ?></td>
-                            <td data-label="Unidad"><?= e($row['unit_label'] ?? 'und') ?></td>
-                            <td data-label="Cantidad vendida"><span class="badge badge-ok"><?= money((float) ($row['quantity'] ?? 0)) ?></span></td>
-                            <td data-label="Facturas"><span class="badge badge-neutral"><?= (int) ($row['document_count'] ?? 0) ?></span></td>
+                            <th>SKU</th><th>Producto</th><th>Unidad</th><th>Cantidad vendida</th><th>Facturas</th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($productSummaryProducts as $row): ?>
+                            <tr>
+                                <td data-label="SKU"><?= e($row['sku'] !== '' ? $row['sku'] : 'Sin SKU') ?></td>
+                                <td data-label="Producto"><?= e($row['product_label'] ?? '') ?></td>
+                                <td data-label="Unidad"><?= e($row['unit_label'] ?? 'und') ?></td>
+                                <td data-label="Cantidad vendida"><span class="badge badge-ok"><?= money((float) ($row['quantity'] ?? 0)) ?></span></td>
+                                <td data-label="Facturas"><span class="badge badge-neutral"><?= (int) ($row['document_count'] ?? 0) ?></span></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($productSummaryServices): ?>
+            <header class="section-head">
+                <div>
+                    <h3>Servicios facturados</h3>
+                    <p>Servicios incluidos en facturas, separados del conteo de productos.</p>
+                </div>
+            </header>
+            <div class="table-wrap">
+                <table class="table mobile-cards">
+                    <thead>
+                        <tr>
+                            <th>Codigo</th><th>Servicio</th><th>Unidad</th><th>Cantidad facturada</th><th>Facturas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($productSummaryServices as $row): ?>
+                            <tr>
+                                <td data-label="Codigo"><?= e($row['sku'] !== '' ? $row['sku'] : 'Sin SKU') ?></td>
+                                <td data-label="Servicio"><?= e($row['product_label'] ?? '') ?></td>
+                                <td data-label="Unidad"><?= e($row['unit_label'] ?? 'serv') ?></td>
+                                <td data-label="Cantidad facturada"><span class="badge badge-neutral"><?= money((float) ($row['quantity'] ?? 0)) ?></span></td>
+                                <td data-label="Facturas"><span class="badge badge-neutral"><?= (int) ($row['document_count'] ?? 0) ?></span></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </article>
 <?php endif; ?>
 

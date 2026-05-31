@@ -7,6 +7,7 @@ use App\Core\Controller;
 use App\Models\Client;
 use App\Models\DeliveryNote;
 use App\Models\Product;
+use App\Models\Quotation;
 use App\Services\PdfService;
 
 class DeliveryNoteControllerModern extends Controller
@@ -22,6 +23,7 @@ class DeliveryNoteControllerModern extends Controller
         $rate = ['rate' => system_exchange_rate(date('Y-m-d')), 'currency_from' => 'USD', 'currency_to' => 'VES'];
         $noteDueDays = invoice_due_days();
         $historyExportQuery = $this->buildHistoryExportQuery($canFilterHistory, $historyFilters);
+        $quotationDraft = $this->quotationDraftForDeliveryNote();
 
         $summary = [
             'operations' => count($notes),
@@ -41,7 +43,7 @@ class DeliveryNoteControllerModern extends Controller
             ),
         ];
 
-        $this->view('delivery_notes/workspace', compact('notes', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'noteDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole'), 'layouts/app_modern');
+        $this->view('delivery_notes/workspace', compact('notes', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'noteDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole', 'quotationDraft'), 'layouts/app_modern');
     }
 
     public function exportHistory(): void
@@ -128,6 +130,21 @@ class DeliveryNoteControllerModern extends Controller
                 0.0
             ), 2);
             $initialPayment = null;
+            $sourceQuotationId = (int) ($_POST['source_quotation_id'] ?? 0);
+            $decreaseInventory = true;
+
+            if ($sourceQuotationId > 0) {
+                $sourceQuotation = (new Quotation())->findFull($sourceQuotationId);
+                if (! $sourceQuotation || ($sourceQuotation['status'] ?? 'open') === 'cancelled') {
+                    throw new \RuntimeException('La cotizacion de origen no esta disponible.');
+                }
+
+                if ((int) ($sourceQuotation['delivery_note_id'] ?? 0) > 0) {
+                    throw new \RuntimeException('Esta cotizacion ya tiene una nota de entrega generada.');
+                }
+
+                $decreaseInventory = (int) ($sourceQuotation['invoice_id'] ?? 0) <= 0;
+            }
 
             if (parse_money_input($_POST['payment_amount_original'] ?? 0) > 0) {
                 $initialPayment = $this->buildPaymentPayload($_POST, [
@@ -152,17 +169,21 @@ class DeliveryNoteControllerModern extends Controller
                 'subtotal_converted' => $subtotalConverted,
                 'total_converted' => $subtotalConverted,
                 'notes' => trim($_POST['notes'] ?? ''),
-            ], $items);
+            ], $items, $decreaseInventory);
 
             if ($initialPayment !== null) {
                 (new DeliveryNote())->registerPayment($noteId, $initialPayment);
+            }
+
+            if ($sourceQuotationId > 0) {
+                (new Quotation())->attachDocument($sourceQuotationId, 'delivery_note', $noteId);
             }
 
             $successMessage = 'Nota de entrega registrada. Puedes consultarla luego en la tabla.';
             $documentPrompt = [
                 'title' => 'Nota de entrega registrada',
                 'text' => 'Deseas abrir el reporte en vista previa de impresion?',
-                'url' => app_url('/delivery-notes/pdf/' . $noteId),
+                'url' => app_url('/delivery-notes/pdf/' . $noteId . '?currency=' . rawurlencode(secondary_currency())),
                 'confirm' => 'Abrir reporte',
                 'cancel' => 'Seguir aqui',
             ];
@@ -250,7 +271,8 @@ class DeliveryNoteControllerModern extends Controller
     public function pdf(string $id): void
     {
         $note = (new DeliveryNote())->findFull((int) $id);
-        (new PdfService())->deliveryNote($note ?? []);
+        $currency = normalize_currency_code((string) ($_GET['currency'] ?? ($_GET['moneda'] ?? '')));
+        (new PdfService())->deliveryNote($note ?? [], $currency !== '' ? $currency : null);
     }
 
     public function details(string $id): void
@@ -422,6 +444,54 @@ class DeliveryNoteControllerModern extends Controller
             'applied_original' => $appliedOriginal,
             'applied_converted' => $appliedConverted,
             'notes' => trim((string) ($source['payment_notes'] ?? $source['notes'] ?? '')),
+        ];
+    }
+
+    private function quotationDraftForDeliveryNote(): ?array
+    {
+        $quotationId = (int) ($_GET['from_quotation'] ?? 0);
+        if ($quotationId <= 0) {
+            return null;
+        }
+
+        $quotation = (new Quotation())->findFull($quotationId);
+        if (! $quotation) {
+            flash('error', 'Cotizacion no encontrada.');
+            return null;
+        }
+
+        if (($quotation['status'] ?? 'open') === 'cancelled') {
+            flash('error', 'No puedes generar nota desde una cotizacion anulada.');
+            return null;
+        }
+
+        if ((int) ($quotation['delivery_note_id'] ?? 0) > 0) {
+            flash('error', 'Esta cotizacion ya tiene una nota de entrega generada.');
+            return null;
+        }
+
+        return $this->buildQuotationDraft($quotation);
+    }
+
+    private function buildQuotationDraft(array $quotation): array
+    {
+        $currency = (string) ($quotation['currency_code'] ?? secondary_currency());
+
+        return [
+            'id' => (int) ($quotation['id'] ?? 0),
+            'number' => (string) ($quotation['quotation_number'] ?? ''),
+            'client_id' => (int) ($quotation['client_id'] ?? 0),
+            'client_name' => (string) ($quotation['client_name'] ?? ''),
+            'client_document' => (string) ($quotation['client_document'] ?? ''),
+            'client_phone' => (string) ($quotation['client_phone'] ?? ''),
+            'currency_code' => $currency,
+            'notes' => trim('Generada desde cotizacion ' . (string) ($quotation['quotation_number'] ?? '') . "\n" . (string) ($quotation['notes'] ?? '')),
+            'items' => array_map(static fn (array $item): array => [
+                'product_id' => (int) ($item['product_id'] ?? 0),
+                'quantity' => (float) ($item['quantity'] ?? 0),
+                'price_original' => (float) ($item['price_original'] ?? 0),
+                'source_currency' => $currency,
+            ], is_array($quotation['items'] ?? null) ? $quotation['items'] : []),
         ];
     }
 

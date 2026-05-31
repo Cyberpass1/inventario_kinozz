@@ -10,6 +10,7 @@ use App\Controllers\InventoryControllerModern as InventoryController;
 use App\Controllers\InvoiceControllerModern as InvoiceController;
 use App\Controllers\ProductionControllerModern as ProductionController;
 use App\Controllers\PurchaseControllerModern as PurchaseController;
+use App\Controllers\QuotationControllerModern as QuotationController;
 use App\Controllers\RateController;
 use App\Controllers\ChartsController;
 use App\Controllers\ReportsControllerModern as ReportsController;
@@ -99,6 +100,15 @@ $router->post('/invoices/payments/{id}', [InvoiceController::class, 'registerPay
 $router->post('/invoices/cancel/{id}', [InvoiceController::class, 'cancel'], $admin);
 $router->get('/invoices/print/{id}', [InvoiceController::class, 'print'], $readOnly);
 $router->get('/invoices/pdf/{id}', [InvoiceController::class, 'pdf'], $readOnly);
+
+$router->get('/quotations', [QuotationController::class, 'index'], $readOnly);
+$router->post('/quotations/clients', [QuotationController::class, 'storeClient'], $ops);
+$router->post('/quotations', [QuotationController::class, 'store'], $ops);
+$router->get('/quotations/details/{id}', [QuotationController::class, 'details'], $readOnly);
+$router->get('/quotations/pdf/{id}', [QuotationController::class, 'pdf'], $readOnly);
+$router->post('/quotations/{id}/to-delivery-note', [QuotationController::class, 'convertToDeliveryNote'], $ops);
+$router->post('/quotations/{id}/to-invoice', [QuotationController::class, 'convertToInvoice'], $ops);
+$router->post('/quotations/cancel/{id}', [QuotationController::class, 'cancel'], $admin);
 
 $router->get('/delivery-notes', [DeliveryNoteController::class, 'index'], $readOnly);
 $router->get('/delivery-notes/export', [DeliveryNoteController::class, 'exportHistory'], $readOnly);

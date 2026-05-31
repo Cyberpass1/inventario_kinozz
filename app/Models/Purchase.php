@@ -479,10 +479,16 @@ class Purchase
             throw new \RuntimeException('Compra no encontrada.');
         }
 
-        $paidOriginal = round_money(min((float) ($row['total_original'] ?? 0), (float) ($totals['paid_original'] ?? 0)));
-        $paidConverted = round_money(min((float) ($row['total_converted'] ?? 0), (float) ($totals['paid_converted'] ?? 0)));
-        $balanceOriginal = round_money(max(0.0, (float) ($row['total_original'] ?? 0) - $paidOriginal));
-        $balanceConverted = round_money(max(0.0, (float) ($row['total_converted'] ?? 0) - $paidConverted));
+        $normalized = normalize_payment_totals(
+            $row['total_original'] ?? 0,
+            $row['total_converted'] ?? 0,
+            $totals['paid_original'] ?? 0,
+            $totals['paid_converted'] ?? 0
+        );
+        $paidOriginal = $normalized['paid_original'];
+        $paidConverted = $normalized['paid_converted'];
+        $balanceOriginal = $normalized['balance_original'];
+        $balanceConverted = $normalized['balance_converted'];
         $paymentStatus = $this->resolvePaymentStatus([
             ...$row,
             'amount_paid_original' => $paidOriginal,

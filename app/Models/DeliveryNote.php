@@ -87,6 +87,7 @@ class DeliveryNote
                     d.notes,
                     d.status,
                     d.payment_status,
+                    d.stock_effect_applied,
                     d.cancelled_at,
                     d.cancellation_reason,
                     d.created_at,
@@ -110,7 +111,7 @@ class DeliveryNote
         return 'NE-' . str_pad((string) (((int) ($row['id'] ?? 0)) + 1), 6, '0', STR_PAD_LEFT);
     }
 
-    public function create(array $header, array $items): int
+    public function create(array $header, array $items, bool $decreaseInventory = true): int
     {
         $db = Database::connection();
         $db->beginTransaction();
@@ -118,8 +119,8 @@ class DeliveryNote
         try {
             $statement = $db->prepare(
                 'INSERT INTO delivery_notes
-                    (client_id, note_number, note_date, due_date, currency_code, exchange_rate, subtotal_original, total_original, amount_paid_original, balance_original, subtotal_converted, total_converted, amount_paid_converted, balance_converted, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    (client_id, note_number, note_date, due_date, currency_code, exchange_rate, subtotal_original, total_original, amount_paid_original, balance_original, subtotal_converted, total_converted, amount_paid_converted, balance_converted, notes, stock_effect_applied)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $statement->execute([
                 $header['client_id'],
@@ -137,6 +138,7 @@ class DeliveryNote
                 0,
                 $header['total_converted'],
                 $header['notes'] ?? null,
+                $decreaseInventory ? 1 : 0,
             ]);
 
             $id = (int) $db->lastInsertId();
@@ -158,7 +160,7 @@ class DeliveryNote
                 ]);
 
                 $product = (new Product())->findVisible((int) $item['product_id']);
-                if ($product && product_tracks_inventory($product)) {
+                if ($decreaseInventory && $product && product_tracks_inventory($product)) {
                     Inventory::decrease(
                         (int) $item['product_id'],
                         (float) $item['quantity'],
@@ -312,7 +314,7 @@ class DeliveryNote
             }
 
             foreach ($note['items'] as $item) {
-                if (product_tracks_inventory((string) ($item['product_type'] ?? 'merchandise'))) {
+                if ((int) ($note['stock_effect_applied'] ?? 1) === 1 && product_tracks_inventory((string) ($item['product_type'] ?? 'merchandise'))) {
                     Inventory::increase(
                         (int) $item['product_id'],
                         (float) $item['quantity'],
@@ -356,10 +358,16 @@ class DeliveryNote
             throw new \RuntimeException('Nota no encontrada.');
         }
 
-        $paidOriginal = round_money(min((float) ($row['total_original'] ?? 0), (float) ($totals['paid_original'] ?? 0)));
-        $paidConverted = round_money(min((float) ($row['total_converted'] ?? 0), (float) ($totals['paid_converted'] ?? 0)));
-        $balanceOriginal = round_money(max(0.0, (float) ($row['total_original'] ?? 0) - $paidOriginal));
-        $balanceConverted = round_money(max(0.0, (float) ($row['total_converted'] ?? 0) - $paidConverted));
+        $normalized = normalize_payment_totals(
+            $row['total_original'] ?? 0,
+            $row['total_converted'] ?? 0,
+            $totals['paid_original'] ?? 0,
+            $totals['paid_converted'] ?? 0
+        );
+        $paidOriginal = $normalized['paid_original'];
+        $paidConverted = $normalized['paid_converted'];
+        $balanceOriginal = $normalized['balance_original'];
+        $balanceConverted = $normalized['balance_converted'];
         $paymentStatus = $this->resolvePaymentStatus([
             ...$row,
             'amount_paid_original' => $paidOriginal,
@@ -411,27 +419,26 @@ class DeliveryNote
     private function applyEffectivePaymentState(array $note): array
     {
         $payments = is_array($note['payments'] ?? null) ? $note['payments'] : [];
-        $paidOriginal = round_money(min(
-            (float) ($note['total_original'] ?? 0),
+        $normalized = normalize_payment_totals(
+            $note['total_original'] ?? 0,
+            $note['total_converted'] ?? 0,
             array_reduce(
                 $payments,
                 static fn (float $carry, array $payment): float => $carry + (float) ($payment['applied_original'] ?? 0),
                 0.0
-            )
-        ));
-        $paidConverted = round_money(min(
-            (float) ($note['total_converted'] ?? 0),
+            ),
             array_reduce(
                 $payments,
                 static fn (float $carry, array $payment): float => $carry + (float) ($payment['applied_converted'] ?? 0),
                 0.0
             )
-        ));
-
+        );
+        $paidOriginal = $normalized['paid_original'];
+        $paidConverted = $normalized['paid_converted'];
         $note['amount_paid_original'] = $paidOriginal;
         $note['amount_paid_converted'] = $paidConverted;
-        $note['balance_original'] = round_money(max(0.0, (float) ($note['total_original'] ?? 0) - $paidOriginal));
-        $note['balance_converted'] = round_money(max(0.0, (float) ($note['total_converted'] ?? 0) - $paidConverted));
+        $note['balance_original'] = $normalized['balance_original'];
+        $note['balance_converted'] = $normalized['balance_converted'];
         $note['payment_status'] = $this->resolvePaymentStatus($note, false);
 
         return $note;

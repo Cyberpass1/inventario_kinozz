@@ -4,7 +4,7 @@
             <h2>Factura #<?= e($invoice['invoice_number'] ?? '') ?></h2>
             <small>
                 <?= e($invoice['invoice_date'] ?? '') ?> ·
-                <?= e($invoice['currency_code'] ?? '') ?>
+                <?= e(secondary_currency()) ?>
                 <?php if (!empty($invoice['exchange_rate'])): ?>
                     · Tasa: <?= money($invoice['exchange_rate']) ?>
                 <?php endif; ?>
@@ -33,8 +33,8 @@
                 <tr>
                     <td><?= e($item['product_name'] ?? '') ?></td>
                     <td class="text-right"><?= money($item['quantity'] ?? 0) ?></td>
-                    <td class="text-right"><?= money($item['price_original'] ?? 0) ?></td>
-                    <td class="text-right"><?= money($item['total_original'] ?? 0) ?></td>
+                    <td class="text-right"><?= money($item['price_converted'] ?? 0) ?></td>
+                    <td class="text-right"><?= money($item['total_converted'] ?? 0) ?></td>
                 </tr>
             <?php endforeach; ?>
         </tbody>
@@ -43,22 +43,15 @@
     <div class="invoice-totals">
         <p>
             <span>Subtotal</span>
-            <strong><?= money($invoice['subtotal_original'] ?? 0) ?> <?= e($invoice['currency_code'] ?? '') ?></strong>
+            <strong><?= money($invoice['subtotal_converted'] ?? 0) ?> <?= e(secondary_currency()) ?></strong>
         </p>
         <p>
             <span>Impuesto</span>
-            <strong><?= money($invoice['tax_original'] ?? 0) ?> <?= e($invoice['currency_code'] ?? '') ?></strong>
+            <strong><?= money($invoice['tax_converted'] ?? 0) ?> <?= e(secondary_currency()) ?></strong>
         </p>
         <p class="total-main">
             <span>Total</span>
-            <strong><?= money($invoice['total_original'] ?? 0) ?> <?= e($invoice['currency_code'] ?? '') ?></strong>
+            <strong><?= money($invoice['total_converted'] ?? 0) ?> <?= e(secondary_currency()) ?></strong>
         </p>
-
-        <?php if (($invoice['currency_code'] ?? '') !== base_currency()): ?>
-            <p class="total-converted">
-                <span>Total en <?= e(base_currency()) ?></span>
-                <strong><?= money($invoice['total_converted'] ?? 0) ?></strong>
-            </p>
-        <?php endif; ?>
     </div>
 </div>

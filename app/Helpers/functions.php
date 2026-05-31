@@ -77,6 +77,34 @@ function payment_exceeds_balance(
     return money_difference($appliedAmount, $availableBalance) > round_money($tolerance ?? payment_rounding_tolerance());
 }
 
+function normalize_payment_totals(
+    float|int|string $totalOriginal,
+    float|int|string $totalConverted,
+    float|int|string $paidOriginal,
+    float|int|string $paidConverted
+): array {
+    $totalOriginal = round_money($totalOriginal);
+    $totalConverted = round_money($totalConverted);
+    $paidOriginal = round_money(min($totalOriginal, (float) $paidOriginal));
+    $paidConverted = round_money(min($totalConverted, (float) $paidConverted));
+    $balanceOriginal = round_money(max(0.0, $totalOriginal - $paidOriginal));
+    $balanceConverted = round_money(max(0.0, $totalConverted - $paidConverted));
+
+    if ($totalOriginal > 0 && ($balanceOriginal <= 0.01 || $paidOriginal >= round_money($totalOriginal - 0.01))) {
+        $paidOriginal = $totalOriginal;
+        $paidConverted = $totalConverted;
+        $balanceOriginal = 0.0;
+        $balanceConverted = 0.0;
+    }
+
+    return [
+        'paid_original' => $paidOriginal,
+        'paid_converted' => $paidConverted,
+        'balance_original' => $balanceOriginal,
+        'balance_converted' => $balanceConverted,
+    ];
+}
+
 function company(): array { return ['name' => env('COMPANY_NAME', 'Empresa'), 'rif' => env('COMPANY_RIF', ''), 'address' => env('COMPANY_ADDRESS', ''), 'phones' => env('COMPANY_PHONES', ''), 'email' => env('COMPANY_EMAIL', ''), 'web' => env('COMPANY_WEB', '')]; }
 
 function app_settings(): array

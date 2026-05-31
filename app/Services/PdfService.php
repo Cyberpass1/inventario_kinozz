@@ -20,15 +20,19 @@ class PdfService
     public function invoice(array $invoice): void
     {
         $pdf = $this->makeDocument('Factura', (string) ($invoice['invoice_number'] ?? ''));
+        $reportCurrency = (string) secondary_currency();
+        $documentCurrency = (string) ($invoice['currency_code'] ?? $reportCurrency);
+        $rate = (float) ($invoice['exchange_rate'] ?? 0);
 
         $meta = [
             ['Numero', (string) ($invoice['invoice_number'] ?? '')],
             ['Fecha', (string) ($invoice['invoice_date'] ?? '')],
             ['Cliente', (string) ($invoice['client_name'] ?? '')],
             ['Documento', (string) ($invoice['client_document'] ?? '')],
+            ['Moneda reporte', $reportCurrency],
         ];
 
-        if (!empty($invoice['exchange_rate']) && (string) ($invoice['currency_code'] ?? '') !== (string) base_currency()) {
+        if (!empty($invoice['exchange_rate']) && (string) ($invoice['currency_code'] ?? '') !== $reportCurrency) {
             $meta[] = ['Tasa', $this->money($invoice['exchange_rate'] ?? 0)];
         }
 
@@ -37,24 +41,20 @@ class PdfService
             $pdf,
             ['Concepto', 'Cant.', 'Precio', 'Importe'],
             [92, 22, 32, 34],
-            array_map(static fn (array $item): array => [
+            array_map(fn (array $item): array => [
                 (string) ($item['product_name'] ?? ''),
                 number_format((float) ($item['quantity'] ?? 0), 2, ',', '.'),
-                number_format((float) ($item['price_original'] ?? 0), 2, ',', '.'),
-                number_format((float) ($item['total_original'] ?? 0), 2, ',', '.'),
+                $this->money($this->documentAmountForCurrency($item, 'price', $documentCurrency, $reportCurrency, $rate)),
+                $this->money($this->documentAmountForCurrency($item, 'total', $documentCurrency, $reportCurrency, $rate)),
             ], $invoice['items'] ?? []),
             ['L', 'R', 'R', 'R']
         );
 
         $totals = [
-            ['Subtotal', $this->money($invoice['subtotal_original'] ?? 0) . ' ' . (string) ($invoice['currency_code'] ?? '')],
-            ['Impuesto', $this->money($invoice['tax_original'] ?? 0) . ' ' . (string) ($invoice['currency_code'] ?? '')],
-            ['Total', $this->money($invoice['total_original'] ?? 0) . ' ' . (string) ($invoice['currency_code'] ?? '')],
+            ['Subtotal', $this->money($invoice['subtotal_converted'] ?? convert_currency_amount($invoice['subtotal_original'] ?? 0, $documentCurrency, $reportCurrency, $rate)) . ' ' . $reportCurrency],
+            ['Impuesto', $this->money($invoice['tax_converted'] ?? convert_currency_amount($invoice['tax_original'] ?? 0, $documentCurrency, $reportCurrency, $rate)) . ' ' . $reportCurrency],
+            ['Total', $this->money($this->documentTotalForCurrency($invoice, $documentCurrency, $reportCurrency, $rate)) . ' ' . $reportCurrency],
         ];
-
-        if ((string) ($invoice['currency_code'] ?? '') !== (string) base_currency()) {
-            $totals[] = ['Total ' . (string) base_currency(), $this->money($invoice['total_converted'] ?? 0)];
-        }
 
         $this->renderTotalsBlock($pdf, $totals);
         $this->renderNotesBlock($pdf, 'Observaciones', (string) ($invoice['notes'] ?? ''));
@@ -62,19 +62,67 @@ class PdfService
         $pdf->Output('I', $this->safeFileName('factura-' . ($invoice['invoice_number'] ?? 'documento')) . '.pdf');
     }
 
-    public function deliveryNote(array $note): void
+    public function deliveryNote(array $note, ?string $outputCurrency = null): void
     {
         $pdf = $this->makeDocument('Nota de entrega', (string) ($note['note_number'] ?? ''));
+        $reportCurrency = $this->resolveDocumentReportCurrency($outputCurrency, (string) ($note['currency_code'] ?? secondary_currency()));
+        $documentCurrency = (string) ($note['currency_code'] ?? $reportCurrency);
+        $rate = (float) ($note['exchange_rate'] ?? 0);
 
         $meta = [
             ['Numero', (string) ($note['note_number'] ?? '')],
             ['Fecha', (string) ($note['note_date'] ?? '')],
             ['Cliente', (string) ($note['client_name'] ?? '')],
             ['Documento', (string) ($note['client_document'] ?? '')],
+            ['Moneda reporte', $reportCurrency],
         ];
 
-        if (!empty($note['exchange_rate']) && (string) ($note['currency_code'] ?? '') !== (string) base_currency()) {
+        if (!empty($note['exchange_rate']) && $documentCurrency !== $reportCurrency) {
             $meta[] = ['Tasa', $this->money($note['exchange_rate'] ?? 0)];
+        }
+
+        $this->renderMetaGrid($pdf, $meta);
+        $this->renderTable(
+            $pdf,
+            ['Concepto', 'Cant.', 'Precio', 'Importe'],
+            [92, 22, 32, 34],
+            array_map(fn (array $item): array => [
+                (string) ($item['product_name'] ?? ''),
+                number_format((float) ($item['quantity'] ?? 0), 2, ',', '.'),
+                $this->money($this->documentAmountForCurrency($item, 'price', $documentCurrency, $reportCurrency, $rate)),
+                $this->money($this->documentAmountForCurrency($item, 'total', $documentCurrency, $reportCurrency, $rate)),
+            ], $note['items'] ?? []),
+            ['L', 'R', 'R', 'R']
+        );
+
+        $totals = [
+            ['Total', $this->money($this->documentTotalForCurrency($note, $documentCurrency, $reportCurrency, $rate)) . ' ' . $reportCurrency],
+        ];
+
+        $this->renderTotalsBlock($pdf, $totals);
+        $this->renderNotesBlock($pdf, 'Observaciones', (string) ($note['notes'] ?? ''));
+
+        $pdf->Output('I', $this->safeFileName('nota-' . ($note['note_number'] ?? 'documento') . '-' . $reportCurrency) . '.pdf');
+    }
+
+    public function quotation(array $quotation): void
+    {
+        $pdf = $this->makeDocument('Cotizacion', (string) ($quotation['quotation_number'] ?? ''));
+        $documentCurrency = (string) ($quotation['currency_code'] ?? secondary_currency());
+        $secondaryCurrency = (string) secondary_currency();
+        $isDollarQuotation = strtoupper($documentCurrency) === 'USD' || strtoupper($documentCurrency) === strtoupper((string) base_currency());
+
+        $meta = [
+            ['Numero', (string) ($quotation['quotation_number'] ?? '')],
+            ['Fecha', (string) ($quotation['quotation_date'] ?? '')],
+            ['Valida hasta', (string) ($quotation['valid_until'] ?? '')],
+            ['Cliente', (string) ($quotation['client_name'] ?? '')],
+            ['Documento', (string) ($quotation['client_document'] ?? '')],
+            ['Moneda', $documentCurrency],
+        ];
+
+        if (!$isDollarQuotation && !empty($quotation['exchange_rate']) && $documentCurrency !== $secondaryCurrency) {
+            $meta[] = ['Tasa', $this->money($quotation['exchange_rate'] ?? 0)];
         }
 
         $this->renderMetaGrid($pdf, $meta);
@@ -87,22 +135,28 @@ class PdfService
                 number_format((float) ($item['quantity'] ?? 0), 2, ',', '.'),
                 number_format((float) ($item['price_original'] ?? 0), 2, ',', '.'),
                 number_format((float) ($item['total_original'] ?? 0), 2, ',', '.'),
-            ], $note['items'] ?? []),
+            ], $quotation['items'] ?? []),
             ['L', 'R', 'R', 'R']
         );
 
         $totals = [
-            ['Total', $this->money($note['total_original'] ?? 0) . ' ' . (string) ($note['currency_code'] ?? '')],
+            ['Total', $this->money($quotation['total_original'] ?? 0) . ' ' . $documentCurrency],
         ];
 
-        if ((string) ($note['currency_code'] ?? '') !== (string) base_currency()) {
-            $totals[] = ['Total ' . (string) base_currency(), $this->money($note['total_converted'] ?? 0)];
+        if (!$isDollarQuotation && $documentCurrency !== $secondaryCurrency) {
+            $totals[] = ['Total ' . $secondaryCurrency, $this->money($quotation['total_converted'] ?? 0)];
         }
 
         $this->renderTotalsBlock($pdf, $totals);
-        $this->renderNotesBlock($pdf, 'Observaciones', (string) ($note['notes'] ?? ''));
 
-        $pdf->Output('I', $this->safeFileName('nota-' . ($note['note_number'] ?? 'documento')) . '.pdf');
+        $conditions = trim((string) ($quotation['notes'] ?? ''));
+        if ($isDollarQuotation) {
+            $conditions = trim($conditions . "\n" . 'Debe cancelarse el equivalente en bolivares a la tasa BCV vigente del dia del pago.');
+        }
+
+        $this->renderNotesBlock($pdf, 'Condiciones', $conditions);
+
+        $pdf->Output('I', $this->safeFileName('cotizacion-' . ($quotation['quotation_number'] ?? 'documento')) . '.pdf');
     }
 
     public function purchase(array $purchase): void
@@ -1763,6 +1817,42 @@ class PdfService
             static fn (float $carry, array $row): float => $carry + (float) ($row['amount'] ?? 0),
             0.0
         );
+    }
+
+    private function resolveDocumentReportCurrency(?string $requestedCurrency, string $fallbackCurrency): string
+    {
+        $requested = normalize_currency_code($requestedCurrency);
+        $base = normalize_currency_code(base_currency());
+        $secondary = normalize_currency_code(secondary_currency());
+
+        if (in_array($requested, [$base, $secondary], true)) {
+            return $requested;
+        }
+
+        $fallback = normalize_currency_code($fallbackCurrency);
+
+        return in_array($fallback, [$base, $secondary], true) ? $fallback : $secondary;
+    }
+
+    private function documentAmountForCurrency(array $item, string $field, string $documentCurrency, string $reportCurrency, float $rate): float
+    {
+        $originalKey = $field . '_original';
+        $convertedKey = $field . '_converted';
+
+        if ($reportCurrency === normalize_currency_code(secondary_currency())) {
+            return round_money($item[$convertedKey] ?? convert_currency_amount($item[$originalKey] ?? 0, $documentCurrency, $reportCurrency, $rate));
+        }
+
+        return round_money(convert_currency_amount($item[$originalKey] ?? 0, $documentCurrency, $reportCurrency, $rate));
+    }
+
+    private function documentTotalForCurrency(array $document, string $documentCurrency, string $reportCurrency, float $rate): float
+    {
+        if ($reportCurrency === normalize_currency_code(secondary_currency())) {
+            return round_money($document['total_converted'] ?? convert_currency_amount($document['total_original'] ?? 0, $documentCurrency, $reportCurrency, $rate));
+        }
+
+        return round_money(convert_currency_amount($document['total_original'] ?? 0, $documentCurrency, $reportCurrency, $rate));
     }
 
     private function money(float|int|string $value): string

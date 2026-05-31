@@ -36,9 +36,11 @@ class Schema
         self::ensureDocumentStatus($db, 'purchases');
         self::ensureDocumentStatus($db, 'expenses');
         self::ensureDocumentStatus($db, 'delivery_notes');
+        self::ensureStockEffectTracking($db);
         self::ensureProductLifecycle($db);
         self::ensureProduction($db);
         self::ensureDeliveryNoteCommercials($db);
+        self::ensureQuotations($db);
         self::ensureReceivablesAndPayables($db);
         self::ensureRateSettings($db);
         self::ensureUsersManagement($db);
@@ -158,6 +160,18 @@ class Schema
         );
     }
 
+    private static function ensureStockEffectTracking(PDO $db): void
+    {
+        foreach ([
+            ['invoices', 'ALTER TABLE invoices ADD COLUMN stock_effect_applied TINYINT(1) NOT NULL DEFAULT 1'],
+            ['delivery_notes', 'ALTER TABLE delivery_notes ADD COLUMN stock_effect_applied TINYINT(1) NOT NULL DEFAULT 1'],
+        ] as [$table, $sql]) {
+            if (!self::columnExists($db, $table, 'stock_effect_applied')) {
+                $db->exec($sql);
+            }
+        }
+    }
+
     private static function ensureProduction(PDO $db): void
     {
         $db->exec(
@@ -250,6 +264,50 @@ class Schema
                 $db->exec($sql);
             }
         }
+    }
+
+    private static function ensureQuotations(PDO $db): void
+    {
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS quotations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                client_id INT NOT NULL,
+                quotation_number VARCHAR(80) NOT NULL,
+                quotation_date DATE NOT NULL,
+                valid_until DATE NULL,
+                currency_code VARCHAR(10) NOT NULL DEFAULT 'USD',
+                exchange_rate DECIMAL(14,4) NOT NULL DEFAULT 1,
+                subtotal_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                subtotal_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                notes TEXT NULL,
+                status VARCHAR(30) NOT NULL DEFAULT 'open',
+                invoice_id INT NULL,
+                delivery_note_id INT NULL,
+                cancelled_at DATETIME NULL,
+                cancellation_reason TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_quotations_client FOREIGN KEY (client_id) REFERENCES clients(id),
+                CONSTRAINT fk_quotations_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+                CONSTRAINT fk_quotations_delivery_note FOREIGN KEY (delivery_note_id) REFERENCES delivery_notes(id) ON DELETE SET NULL
+            )"
+        );
+
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS quotation_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                quotation_id INT NOT NULL,
+                product_id INT NOT NULL,
+                quantity DECIMAL(14,2) NOT NULL,
+                price_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                price_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_original DECIMAL(14,2) NOT NULL DEFAULT 0,
+                total_converted DECIMAL(14,2) NOT NULL DEFAULT 0,
+                CONSTRAINT fk_quotation_items_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE,
+                CONSTRAINT fk_quotation_items_product FOREIGN KEY (product_id) REFERENCES products(id)
+            )"
+        );
     }
 
     private static function ensureReceivablesAndPayables(PDO $db): void
@@ -382,13 +440,16 @@ class Schema
         $db->exec('UPDATE delivery_notes SET due_date = COALESCE(due_date, note_date) WHERE due_date IS NULL');
         $db->exec('UPDATE invoices SET balance_original = total_original WHERE balance_original = 0 AND total_original > 0 AND amount_paid_original = 0');
         $db->exec('UPDATE invoices SET balance_converted = total_converted WHERE balance_converted = 0 AND total_converted > 0 AND amount_paid_converted = 0');
-        $db->exec("UPDATE invoices SET payment_status = CASE WHEN COALESCE(status, 'active') = 'cancelled' THEN 'cancelled' WHEN balance_converted <= 0 THEN 'paid' WHEN amount_paid_converted > 0 THEN 'partial' ELSE 'pending' END");
+        $db->exec("UPDATE invoices SET amount_paid_original = total_original, amount_paid_converted = total_converted, balance_original = 0, balance_converted = 0 WHERE COALESCE(status, 'active') <> 'cancelled' AND total_original > 0 AND amount_paid_original > 0 AND (ABS(balance_original) <= 0.01 OR amount_paid_original >= total_original - 0.01)");
+        $db->exec("UPDATE invoices SET payment_status = CASE WHEN COALESCE(status, 'active') = 'cancelled' THEN 'cancelled' WHEN balance_converted <= 0.01 THEN 'paid' WHEN amount_paid_converted > 0 THEN 'partial' ELSE 'pending' END");
         $db->exec('UPDATE purchases SET balance_original = total_original WHERE balance_original = 0 AND total_original > 0 AND amount_paid_original = 0');
         $db->exec('UPDATE purchases SET balance_converted = total_converted WHERE balance_converted = 0 AND total_converted > 0 AND amount_paid_converted = 0');
-        $db->exec("UPDATE purchases SET payment_status = CASE WHEN COALESCE(status, 'active') = 'cancelled' THEN 'cancelled' WHEN balance_converted <= 0 THEN 'paid' WHEN amount_paid_converted > 0 THEN 'partial' ELSE 'pending' END");
+        $db->exec("UPDATE purchases SET amount_paid_original = total_original, amount_paid_converted = total_converted, balance_original = 0, balance_converted = 0 WHERE COALESCE(status, 'active') <> 'cancelled' AND total_original > 0 AND amount_paid_original > 0 AND (ABS(balance_original) <= 0.01 OR amount_paid_original >= total_original - 0.01)");
+        $db->exec("UPDATE purchases SET payment_status = CASE WHEN COALESCE(status, 'active') = 'cancelled' THEN 'cancelled' WHEN balance_converted <= 0.01 THEN 'paid' WHEN amount_paid_converted > 0 THEN 'partial' ELSE 'pending' END");
         $db->exec('UPDATE delivery_notes SET balance_original = total_original WHERE balance_original = 0 AND total_original > 0 AND amount_paid_original = 0');
         $db->exec('UPDATE delivery_notes SET balance_converted = total_converted WHERE balance_converted = 0 AND total_converted > 0 AND amount_paid_converted = 0');
-        $db->exec("UPDATE delivery_notes SET payment_status = CASE WHEN COALESCE(status, 'active') = 'cancelled' THEN 'cancelled' WHEN balance_converted <= 0 THEN 'paid' WHEN amount_paid_converted > 0 THEN 'partial' ELSE 'pending' END");
+        $db->exec("UPDATE delivery_notes SET amount_paid_original = total_original, amount_paid_converted = total_converted, balance_original = 0, balance_converted = 0 WHERE COALESCE(status, 'active') <> 'cancelled' AND total_original > 0 AND amount_paid_original > 0 AND (ABS(balance_original) <= 0.01 OR amount_paid_original >= total_original - 0.01)");
+        $db->exec("UPDATE delivery_notes SET payment_status = CASE WHEN COALESCE(status, 'active') = 'cancelled' THEN 'cancelled' WHEN balance_converted <= 0.01 THEN 'paid' WHEN amount_paid_converted > 0 THEN 'partial' ELSE 'pending' END");
     }
 
     private static function ensureRateSettings(PDO $db): void

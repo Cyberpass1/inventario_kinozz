@@ -591,6 +591,43 @@
         button.addEventListener("click", () => closeModal(button.closest(".modal-shell")));
     });
 
+    document.querySelectorAll("[data-swal-navigate]").forEach((link) => {
+        link.addEventListener("click", (event) => {
+            const href = link.getAttribute("href") || "";
+            if (href === "") {
+                return;
+            }
+
+            event.preventDefault();
+
+            const navigate = () => {
+                window.location.href = href;
+            };
+
+            if (window.Swal) {
+                window.Swal.fire({
+                    title: link.dataset.swalTitle || "Confirmar accion",
+                    text: link.dataset.swalText || "Quieres continuar?",
+                    icon: link.dataset.swalIcon || "question",
+                    showCancelButton: true,
+                    confirmButtonText: link.dataset.swalConfirm || "Continuar",
+                    cancelButtonText: link.dataset.swalCancel || "Cancelar",
+                    confirmButtonColor: "#2f6f68",
+                    cancelButtonColor: "#64748b",
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        navigate();
+                    }
+                });
+                return;
+            }
+
+            if (window.confirm(link.dataset.swalText || "Quieres continuar?")) {
+                navigate();
+            }
+        });
+    });
+
     document.querySelectorAll("form[data-logout-confirm]").forEach((form) => {
         form.addEventListener("submit", (event) => {
             if (form.dataset.logoutConfirmed === "1") {
@@ -1328,7 +1365,20 @@
         };
 
         bindOptions();
-        resetSelectionState();
+
+        const initialClientId = String(hiddenInput.value || "").trim();
+        if (initialClientId !== "") {
+            selectClient({
+                id: initialClientId,
+                name: searchInput.value || "Cliente seleccionado",
+                document: searchInput.dataset.clientDocument || "",
+                phone: searchInput.dataset.clientPhone || "",
+                email: searchInput.dataset.clientEmail || "",
+            });
+        } else {
+            resetSelectionState();
+        }
+
         setStatus(defaultStatusText);
 
         searchInput.addEventListener("focus", () => {
@@ -2137,7 +2187,7 @@
 
         form.dataset.dueDaysReady = "1";
         const days = Number.parseInt(form.dataset.dueDays || "0", 10);
-        const dateInput = form.querySelector("[name='invoice_date'], [name='purchase_date'], [name='note_date']");
+        const dateInput = form.querySelector("[name='invoice_date'], [name='purchase_date'], [name='note_date'], [name='quotation_date']");
         const dueDisplay = form.querySelector("[data-due-date-display]");
 
         if (!dateInput || !dueDisplay) {
