@@ -18,15 +18,13 @@
                         <span>Gestión integral de inventario y movimientos</span>
                     </div>
 
+                    
                     <div class="feature-item">
                         <span class="feature-dot"></span>
                         <span>Control de usuarios y niveles de acceso</span>
                     </div>
 
-                    <div class="feature-item">
-                        <span class="feature-dot"></span>
-                        <span>Operación multimoneda USD / VES</span>
-                    </div>
+                 
 
                     <div class="feature-item">
                         <span class="feature-dot"></span>
