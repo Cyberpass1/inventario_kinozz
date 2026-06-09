@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Models\CashAccount;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Supplier;
@@ -44,7 +45,8 @@ class PurchaseControllerModern extends Controller
         ];
 
         $purchaseFilters = $filters;
-        $this->view('purchases/workspace', compact('purchases', 'suppliers', 'products', 'nextNumber', 'rate', 'summary', 'user', 'purchaseDueDays', 'purchaseFilters'), 'layouts/app_modern');
+        $cashAccounts = (new CashAccount())->active();
+        $this->view('purchases/workspace', compact('purchases', 'suppliers', 'products', 'nextNumber', 'rate', 'summary', 'user', 'purchaseDueDays', 'purchaseFilters', 'cashAccounts'), 'layouts/app_modern');
     }
 
     public function exportHistory(): void
@@ -150,7 +152,6 @@ class PurchaseControllerModern extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => $successMessage,
-                    'redirect' => app_url('/purchases'),
                 ]);
             }
 
@@ -188,7 +189,6 @@ class PurchaseControllerModern extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => 'Compra actualizada correctamente.',
-                    'redirect' => app_url('/purchases'),
                 ]);
             }
 
@@ -303,7 +303,6 @@ class PurchaseControllerModern extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => 'Pago a proveedor registrado correctamente.',
-                    'redirect' => app_url('/purchases'),
                 ]);
             }
 
@@ -351,7 +350,7 @@ class PurchaseControllerModern extends Controller
         $paymentCurrencyDifference = money_difference($amount, $availableInPaymentCurrency);
         $matchesDisplayedBalance = abs($amount - $availableInPaymentCurrency) <= 0.01
             || abs($appliedOriginal - $availableOriginal) <= 0.01;
-        $roundingTolerance = payment_rounding_tolerance();
+        $roundingTolerance = payment_rounding_tolerance(max($availableOriginal, $availableInPaymentCurrency));
 
         if (
             $matchesDisplayedBalance
@@ -380,6 +379,7 @@ class PurchaseControllerModern extends Controller
             'amount_converted' => $paymentConverted,
             'applied_original' => $appliedOriginal,
             'applied_converted' => $appliedConverted,
+            'treasury_account_id' => (int) ($source['treasury_account_id'] ?? 0),
             'notes' => trim((string) ($source['payment_notes'] ?? $source['notes'] ?? '')),
         ];
     }

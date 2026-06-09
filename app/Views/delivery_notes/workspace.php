@@ -341,6 +341,12 @@ $renderNoteLine = static function (string $namePrefix, array $item = [], array $
                                 <option value="<?= e(base_currency()) ?>"><?= e(base_currency()) ?></option>
                             </select>
                         </label>
+                        <label class="pos-checkout-full">Cuenta de tesoreria
+                            <select name="treasury_account_id" data-treasury-account-select>
+                                <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                            </select>
+                            <small>Se autollena segun la moneda; puedes cambiarla.</small>
+                        </label>
                         <label class="pos-checkout-full">Referencia
                             <input name="payment_reference" placeholder="Opcional">
                         </label>
@@ -639,6 +645,12 @@ $renderNoteLine = static function (string $namePrefix, array $item = [], array $
                     <?php endforeach; ?>
                 </select>
             </label>
+            <label class="col-span-2">Cuenta de tesoreria
+                <select name="treasury_account_id" data-treasury-account-select>
+                    <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                </select>
+                <small>Se autollena segun la moneda del cobro; puedes cambiarla.</small>
+            </label>
             <label class="col-span-2">Notas
                 <textarea name="notes" placeholder="Banco, persona que paga, observaciones del cobro"></textarea>
             </label>
@@ -646,3 +658,41 @@ $renderNoteLine = static function (string $namePrefix, array $item = [], array $
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    "use strict";
+    // Tras una accion del historial (cobro/edicion) la pagina recarga la misma URL
+    // con sus filtros; esto reabre el historial y restaura el scroll para no perder
+    // el lugar donde estabas trabajando.
+    var details = document.querySelector("details.pos-history");
+    if (!details) {
+        return;
+    }
+
+    var OPEN_KEY = "pos.history.open:" + window.location.pathname;
+    var SCROLL_KEY = "pos.history.scroll:" + window.location.pathname;
+
+    if (sessionStorage.getItem(OPEN_KEY) === "1") {
+        details.open = true;
+    }
+    details.addEventListener("toggle", function () {
+        sessionStorage.setItem(OPEN_KEY, details.open ? "1" : "0");
+    });
+
+    var savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll !== null) {
+        sessionStorage.removeItem(SCROLL_KEY);
+        window.requestAnimationFrame(function () {
+            window.scrollTo(0, parseInt(savedScroll, 10) || 0);
+        });
+    }
+
+    var saveScroll = function () {
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+    };
+    document.querySelectorAll("[data-document-payment-form], .pos-history form").forEach(function (form) {
+        form.addEventListener("submit", saveScroll);
+    });
+})();
+</script>

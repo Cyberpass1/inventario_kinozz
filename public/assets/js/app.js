@@ -685,6 +685,68 @@
         return values;
     };
 
+    // La moneda del pago la elige el usuario (como siempre). La cuenta de tesoreria
+    // se autollena con la primera cuenta activa de esa moneda (default por moneda),
+    // pero el usuario puede cambiarla. No tocamos la moneda desde la cuenta.
+    const currencyFieldIn = (scope) => scope?.querySelector(
+        "[data-document-payment-currency-select], [data-payment-currency-select], [data-expense-currency-select]"
+    ) || null;
+
+    const syncDefaultAccountByCurrency = (scope, force) => {
+        if (!scope) {
+            return;
+        }
+
+        const accountSelect = scope.querySelector("[data-treasury-account-select]");
+        const currencyField = currencyFieldIn(scope);
+        if (!accountSelect || !currencyField) {
+            return;
+        }
+
+        const currency = normalizeCurrency(currencyField.value || "");
+        if (!currency) {
+            return;
+        }
+
+        const selected = accountSelect.options[accountSelect.selectedIndex] || null;
+        const selectedCurrency = normalizeCurrency(selected?.dataset.currency || "");
+
+        // Solo cambiamos la cuenta si no coincide con la moneda (o si se fuerza al abrir).
+        if (!force && selectedCurrency === currency) {
+            return;
+        }
+
+        const match = Array.from(accountSelect.options).find(
+            (opt) => opt.value && normalizeCurrency(opt.dataset.currency || "") === currency
+        );
+        if (match) {
+            accountSelect.value = match.value;
+        }
+    };
+
+    document.querySelectorAll("[data-treasury-account-select]").forEach((select) => {
+        const scope = select.closest("form") || select.closest("[data-document-payment-form]");
+        if (!scope) {
+            return;
+        }
+
+        const currencyField = currencyFieldIn(scope);
+        if (currencyField) {
+            currencyField.addEventListener("change", () => syncDefaultAccountByCurrency(scope, false));
+        }
+
+        // El metodo puede forzar la moneda (transferencia->Bs, etc.) sin disparar
+        // change; reajustamos la cuenta default tras ese recalculo.
+        const methodField = scope.querySelector("[data-payment-method-select]");
+        if (methodField) {
+            methodField.addEventListener("change", () => {
+                window.setTimeout(() => syncDefaultAccountByCurrency(scope, false), 0);
+            });
+        }
+
+        syncDefaultAccountByCurrency(scope, true);
+    });
+
     document.querySelectorAll("[data-document-payment-open]").forEach((button) => {
         button.addEventListener("click", () => {
             const modalName = button.dataset.modalOpen;
@@ -759,6 +821,11 @@
                     option.selected = currency === currencyCode;
                     currencySelect.appendChild(option);
                 });
+            }
+
+            // Autollenar la cuenta segun la moneda del documento (cambiable por el usuario).
+            if (form) {
+                syncDefaultAccountByCurrency(form, true);
             }
         });
     });

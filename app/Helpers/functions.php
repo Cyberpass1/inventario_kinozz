@@ -59,9 +59,12 @@ function round_money(float|int|string $amount): float
     return round((float) $amount, 2);
 }
 
-function payment_rounding_tolerance(): float
+function payment_rounding_tolerance(float|int|string $reference = 0): float
 {
-    return 0.10;
+    // Tolerancia para diferencias por redondeo al pagar el saldo completo,
+    // sobre todo al convertir entre monedas (redondeo a bolivares enteros).
+    // Escala con el monto (0,1%) con un piso de 0,10 para montos pequenos.
+    return max(0.10, round_money((float) $reference) * 0.001);
 }
 
 function money_difference(float|int|string $left, float|int|string $right): float
@@ -291,6 +294,62 @@ function product_unit_label(array|string|null $product, ?string $fallbackType = 
     }
 
     return normalize_product_unit((string) $product, $fallbackType);
+}
+function treasury_account_types(): array
+{
+    return [
+        'cash' => 'Caja',
+        'bank' => 'Banco',
+        'wallet' => 'Billetera',
+    ];
+}
+function treasury_account_type_normalize(string|null $type): string
+{
+    $type = strtolower(trim((string) $type));
+
+    return array_key_exists($type, treasury_account_types()) ? $type : 'bank';
+}
+function account_type_label(string|null $type): string
+{
+    return treasury_account_types()[treasury_account_type_normalize($type)] ?? 'Banco';
+}
+function account_type_default_method(string|null $type): string
+{
+    return match (treasury_account_type_normalize($type)) {
+        'cash' => 'cash',
+        'wallet' => 'usdt',
+        default => 'bank_transfer',
+    };
+}
+/**
+ * Renderiza las <option> de un selector de cuenta de tesoreria. Cada opcion lleva
+ * data-currency y data-method para que el front fije la moneda/metodo del pago
+ * desde la cuenta elegida.
+ */
+function treasury_account_options_markup(array $accounts, int|null $selectedId = null, bool $withEmpty = false): string
+{
+    $html = '';
+
+    if ($withEmpty) {
+        $html .= '<option value="">— Selecciona una cuenta —</option>';
+    }
+
+    foreach ($accounts as $account) {
+        $id = (int) ($account['id'] ?? 0);
+        $currency = normalize_currency_code((string) ($account['currency_code'] ?? ''));
+        $method = (string) ($account['method_type'] ?? account_type_default_method($account['account_type'] ?? 'bank'));
+        $label = trim((string) ($account['account_name'] ?? ''))
+            . ' (' . $currency . ') — ' . account_type_label($account['account_type'] ?? 'bank');
+        $selected = ($selectedId !== null && $selectedId === $id) ? ' selected' : '';
+
+        $html .= '<option value="' . $id . '"'
+            . ' data-currency="' . e($currency) . '"'
+            . ' data-method="' . e($method) . '"' . $selected . '>'
+            . e($label)
+            . '</option>';
+    }
+
+    return $html;
 }
 function treasury_account_label(string|null $method, string|null $currency): string
 {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Models\CashAccount;
 use App\Models\Client;
 use App\Models\DeliveryNote;
 use App\Models\Product;
@@ -43,7 +44,12 @@ class DeliveryNoteControllerModern extends Controller
             ),
         ];
 
+<<<<<<< HEAD
         $this->view('delivery_notes/workspace', compact('notes', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'noteDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole', 'quotationDraft'), 'layouts/app_modern');
+=======
+        $cashAccounts = (new CashAccount())->active();
+        $this->view('delivery_notes/workspace', compact('notes', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'noteDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole', 'cashAccounts'), 'layouts/app_modern');
+>>>>>>> d5f3e10 (cambios de tesoreria)
     }
 
     public function exportHistory(): void
@@ -192,7 +198,6 @@ class DeliveryNoteControllerModern extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => $successMessage,
-                    'redirect' => app_url('/delivery-notes'),
                     'document_prompt' => $documentPrompt,
                 ]);
             }
@@ -230,7 +235,6 @@ class DeliveryNoteControllerModern extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => 'Cobro registrado correctamente en la nota de entrega.',
-                    'redirect' => app_url('/delivery-notes'),
                 ]);
             }
 
@@ -410,7 +414,7 @@ class DeliveryNoteControllerModern extends Controller
         $paymentCurrencyDifference = money_difference($amount, $availableInPaymentCurrency);
         $matchesDisplayedBalance = abs($amount - $availableInPaymentCurrency) <= 0.01
             || abs($appliedOriginal - $availableOriginal) <= 0.01;
-        $roundingTolerance = payment_rounding_tolerance();
+        $roundingTolerance = payment_rounding_tolerance(max($availableOriginal, $availableInPaymentCurrency));
 
         if (
             $matchesDisplayedBalance
@@ -443,6 +447,7 @@ class DeliveryNoteControllerModern extends Controller
             'amount_converted' => $paymentConverted,
             'applied_original' => $appliedOriginal,
             'applied_converted' => $appliedConverted,
+            'treasury_account_id' => (int) ($source['treasury_account_id'] ?? 0),
             'notes' => trim((string) ($source['payment_notes'] ?? $source['notes'] ?? '')),
         ];
     }

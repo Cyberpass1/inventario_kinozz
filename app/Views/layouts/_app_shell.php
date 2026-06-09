@@ -79,39 +79,45 @@ $navGroups = [
         'eyebrow' => 'General',
         'title' => 'Workspace',
         'items' => [
-            ['label' => 'Dashboard', 'hint' => 'Resumen general del negocio', 'href' => '/dashboard', 'mode' => 'exact'],
+            ['label' => 'Dashboard', 'icon' => 'bi-grid-1x2', 'hint' => 'Resumen general del negocio', 'href' => '/dashboard', 'mode' => 'exact'],
         ],
     ],
     [
         'eyebrow' => 'Ventas',
         'title' => 'Clientes y facturacion',
         'items' => [
+<<<<<<< HEAD
             ['label' => 'Cotizaciones', 'hint' => 'Propuestas y conversion comercial', 'href' => '/quotations', 'mode' => 'prefix'],
             ['label' => 'Facturas', 'hint' => 'Emision y seguimiento comercial', 'href' => '/invoices', 'mode' => 'prefix'],
             ['label' => 'Entregas', 'hint' => 'Despachos y salidas operativas', 'href' => '/delivery-notes', 'mode' => 'prefix'],
             ['label' => 'Clientes', 'hint' => 'Relacion comercial y contactos', 'href' => '/clients', 'mode' => 'prefix'],
+=======
+            ['label' => 'Facturas', 'icon' => 'bi-receipt', 'hint' => 'Emision y seguimiento comercial', 'href' => '/invoices', 'mode' => 'prefix'],
+            ['label' => 'Entregas', 'icon' => 'bi-truck', 'hint' => 'Despachos y salidas operativas', 'href' => '/delivery-notes', 'mode' => 'prefix'],
+            ['label' => 'Clientes', 'icon' => 'bi-people', 'hint' => 'Relacion comercial y contactos', 'href' => '/clients', 'mode' => 'prefix'],
+>>>>>>> d5f3e10 (cambios de tesoreria)
         ],
     ],
     [
         'eyebrow' => 'Finanzas',
         'title' => 'Compras y gastos',
         'items' => [
-            ['label' => 'Compras', 'hint' => 'Registro de ingresos y costos', 'href' => '/purchases', 'mode' => 'prefix'],
-            ['label' => 'Proveedores', 'hint' => 'Directorio, estado y mantenimiento', 'href' => '/suppliers', 'mode' => 'prefix'],
-            ['label' => 'Gastos', 'hint' => 'Control de egresos operativos', 'href' => '/expenses', 'mode' => 'prefix'],
+            ['label' => 'Compras', 'icon' => 'bi-bag-check', 'hint' => 'Registro de ingresos y costos', 'href' => '/purchases', 'mode' => 'prefix'],
+            ['label' => 'Proveedores', 'icon' => 'bi-building', 'hint' => 'Directorio, estado y mantenimiento', 'href' => '/suppliers', 'mode' => 'prefix'],
+            ['label' => 'Gastos', 'icon' => 'bi-wallet2', 'hint' => 'Control de egresos operativos', 'href' => '/expenses', 'mode' => 'prefix'],
         ],
     ],
     (static function (): array {
         $items = [
-            ['label' => 'Catalogo', 'hint' => 'Productos, categorias y existencias', 'href' => '/inventory', 'mode' => 'exact'],
-            ['label' => 'Servicios', 'hint' => 'Catalogo comercial sin inventario', 'href' => '/services', 'mode' => 'prefix'],
+            ['label' => 'Catalogo', 'icon' => 'bi-box-seam', 'hint' => 'Productos, categorias y existencias', 'href' => '/inventory', 'mode' => 'exact'],
+            ['label' => 'Servicios', 'icon' => 'bi-tools', 'hint' => 'Catalogo comercial sin inventario', 'href' => '/services', 'mode' => 'prefix'],
         ];
 
         if (production_enabled()) {
-            $items[] = ['label' => 'Produccion', 'hint' => 'Recetas y fabricacion interna', 'href' => '/production', 'mode' => 'prefix'];
+            $items[] = ['label' => 'Produccion', 'icon' => 'bi-gear-wide-connected', 'hint' => 'Recetas y fabricacion interna', 'href' => '/production', 'mode' => 'prefix'];
         }
 
-        $items[] = ['label' => 'Movimientos', 'hint' => 'Entradas, salidas y trazabilidad', 'href' => '/inventory/movements', 'mode' => 'prefix'];
+        $items[] = ['label' => 'Movimientos', 'icon' => 'bi-arrow-left-right', 'hint' => 'Entradas, salidas y trazabilidad', 'href' => '/inventory/movements', 'mode' => 'prefix'];
 
         return [
             'eyebrow' => 'Inventario',
@@ -123,8 +129,8 @@ $navGroups = [
         'eyebrow' => 'Analitica',
         'title' => 'Reportes',
         'items' => [
-            ['label' => 'Reportes', 'hint' => 'Metricas clave y libros contables', 'href' => '/reports', 'mode' => 'prefix'],
-            ['label' => 'Graficas', 'hint' => 'Tendencias, comparativos y predicciones', 'href' => '/charts', 'mode' => 'prefix'],
+            ['label' => 'Reportes', 'icon' => 'bi-clipboard-data', 'hint' => 'Metricas clave y libros contables', 'href' => '/reports', 'mode' => 'prefix'],
+            ['label' => 'Graficas', 'icon' => 'bi-bar-chart', 'hint' => 'Tendencias, comparativos y predicciones', 'href' => '/charts', 'mode' => 'prefix'],
         ],
     ],
 ];
@@ -134,8 +140,9 @@ if ($role === 'administrator') {
         'eyebrow' => 'Sistema',
         'title' => 'Configuracion',
         'items' => [
-            ['label' => 'Ajustes generales', 'hint' => 'Empresa, monedas y parametros', 'href' => '/settings', 'mode' => 'prefix'],
-            ['label' => 'Usuarios', 'hint' => 'Accesos, roles y estado de cuentas', 'href' => '/settings/users', 'mode' => 'prefix'],
+            ['label' => 'Ajustes generales', 'icon' => 'bi-sliders', 'hint' => 'Empresa, monedas y parametros', 'href' => '/settings', 'mode' => 'exact'],
+            ['label' => 'Cuentas de tesoreria', 'icon' => 'bi-bank', 'hint' => 'Cajas, bancos y billeteras', 'href' => '/settings/treasury-accounts', 'mode' => 'prefix'],
+            ['label' => 'Usuarios', 'icon' => 'bi-person-gear', 'hint' => 'Accesos, roles y estado de cuentas', 'href' => '/settings/users', 'mode' => 'prefix'],
         ],
     ];
 }
@@ -318,6 +325,7 @@ $assetsBaseUrl = asset_url();
                                         title="<?= e($item['label']) ?>"
                                         <?= $itemActive ? 'aria-current="page"' : '' ?>
                                     >
+                                        <i class="bi <?= e($item['icon'] ?? 'bi-dot') ?> nav-ic" aria-hidden="true"></i>
                                         <span class="nav-compact-label"><?= e($navShortLabel($item['label'])) ?></span>
                                         <span class="nav-label"><?= e($item['label']) ?></span>
                                         <small class="nav-hint"><?= e($item['hint']) ?></small>

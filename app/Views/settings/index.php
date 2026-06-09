@@ -1,14 +1,20 @@
-<section class="page-header">
-    <div>
-        <span class="eyebrow">Configuracion</span>
-        <h2>Motor de tasa, IVA y vencimientos</h2>
-        <p>Define tasa operativa, IVA y cuantos dias tendran facturas y compras antes de vencer, sin pedir esa fecha manualmente en cada documento.</p>
-    </div>
-    <div class="header-summary">
-        <div><span>Base operativa</span><strong>USD / VES</strong></div>
-        <div><span>Tasa vigente</span><strong><?= money($rateMeta['rate'] ?? default_exchange_rate()) ?></strong></div>
-        <div><span>Factura vence en</span><strong><?= (int) ($settings['invoice_due_days'] ?? invoice_due_days()) ?> dias</strong></div>
-        <div><span>Compra vence en</span><strong><?= (int) ($settings['purchase_due_days'] ?? purchase_due_days()) ?> dias</strong></div>
+<section class="inventory-shell">
+    <header class="inventory-topbar">
+        <div class="inventory-topbar-title">
+            <h3>Motor de tasa, IVA y vencimientos</h3>
+            <small>Define tasa operativa, IVA y cuantos dias tendran facturas y compras antes de vencer, sin pedir esa fecha en cada documento.</small>
+        </div>
+        <div class="inventory-topbar-actions">
+            <a class="btn btn-outline btn-sm" href="<?= e(app_url('/settings/users')) ?>">Usuarios</a>
+            <a class="btn btn-outline btn-sm" href="<?= e(app_url('/profile')) ?>">Mi perfil</a>
+        </div>
+    </header>
+
+    <div class="inventory-kpis">
+        <div class="inventory-kpi inventory-kpi-money"><span>Tasa vigente</span><strong><?= money($rateMeta['rate'] ?? default_exchange_rate()) ?></strong><em>VES / USD</em></div>
+        <div class="inventory-kpi"><span>IVA por defecto</span><strong><?= e((string) ($settings['tax_percent'] ?? tax_percent())) ?>%</strong></div>
+        <div class="inventory-kpi"><span>Factura vence en</span><strong><?= (int) ($settings['invoice_due_days'] ?? invoice_due_days()) ?> dias</strong></div>
+        <div class="inventory-kpi"><span>Compra vence en</span><strong><?= (int) ($settings['purchase_due_days'] ?? purchase_due_days()) ?> dias</strong></div>
     </div>
 </section>
 
@@ -118,7 +124,7 @@
     </article>
 </section>
 
-<article class="card">
+<article class="card inventory-catalog-card">
     <header class="section-head">
         <div>
             <h3>Historial de tasas</h3>
@@ -126,8 +132,25 @@
         </div>
     </header>
 
-    <div class="table-wrap">
-        <table class="table">
+    <div class="inventory-catalog-toolbar">
+        <label class="inventory-filter inventory-filter-search">
+            <span>Buscar</span>
+            <input
+                type="search"
+                placeholder="Fecha, moneda origen o destino..."
+                autocomplete="off"
+                data-table-filter-input
+                data-table-filter-target="rates-history"
+            >
+        </label>
+        <div class="inventory-filter-meta">
+            <strong data-table-filter-count data-table-filter-target="rates-history" data-table-filter-label="tasas"><?= count($rates) ?> tasas</strong>
+            <small>registradas</small>
+        </div>
+    </div>
+
+    <div class="table-wrap table-wrap-mobile-slider">
+        <table class="table mobile-cards">
             <thead>
                 <tr>
                     <th>Fecha</th>
@@ -136,23 +159,31 @@
                     <th>Tasa</th>
                 </tr>
             </thead>
-            <tbody data-table-pagination data-table-pagination-size="15">
+            <tbody data-table-filter-rows="rates-history" data-table-pagination data-table-pagination-size="15">
                 <?php if ($rates !== []): ?>
                     <?php foreach ($rates as $rate): ?>
-                        <tr>
-                            <td><?= e($rate['rate_date']) ?></td>
-                            <td><?= e($rate['currency_from']) ?></td>
-                            <td><?= e($rate['currency_to']) ?></td>
-                            <td><?= money($rate['rate']) ?></td>
+                        <?php
+                        $haystack = strtolower(trim(
+                            ((string) ($rate['rate_date'] ?? '')) . ' '
+                            . ((string) ($rate['currency_from'] ?? '')) . ' '
+                            . ((string) ($rate['currency_to'] ?? ''))
+                        ));
+                        ?>
+                        <tr data-filter-search="<?= e($haystack) ?>">
+                            <td data-label="Fecha"><?= e($rate['rate_date']) ?></td>
+                            <td data-label="Desde"><?= e($rate['currency_from']) ?></td>
+                            <td data-label="Hacia"><?= e($rate['currency_to']) ?></td>
+                            <td data-label="Tasa"><?= money($rate['rate']) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="4">Aun no hay tasas registradas en el historial.</td>
+                        <td colspan="4" class="empty-state">Aun no hay tasas registradas en el historial.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
         </table>
+        <div class="empty-state" data-table-filter-empty="rates-history" hidden>No hay tasas que coincidan con la busqueda.</div>
     </div>
 </article>
 

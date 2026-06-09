@@ -345,6 +345,12 @@ $renderInvoiceLine = static function (string $namePrefix, array $item = [], arra
                                 <option value="<?= e(base_currency()) ?>"><?= e(base_currency()) ?></option>
                             </select>
                         </label>
+                        <label class="pos-checkout-full">Cuenta de tesoreria
+                            <select name="treasury_account_id" data-treasury-account-select>
+                                <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                            </select>
+                            <small>Se autollena segun la moneda; puedes cambiarla.</small>
+                        </label>
                         <label class="pos-checkout-full">Referencia
                             <input name="payment_reference" placeholder="Opcional">
                         </label>
@@ -646,6 +652,12 @@ $renderInvoiceLine = static function (string $namePrefix, array $item = [], arra
                     <?php endforeach; ?>
                 </select>
             </label>
+            <label class="col-span-2">Cuenta de tesoreria
+                <select name="treasury_account_id" data-treasury-account-select>
+                    <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                </select>
+                <small>Se autollena segun la moneda del cobro; puedes cambiarla.</small>
+            </label>
             <label class="col-span-2">Notas
                 <textarea name="notes" placeholder="Banco, persona que paga, observaciones del cobro inicial"></textarea>
             </label>
@@ -653,3 +665,41 @@ $renderInvoiceLine = static function (string $namePrefix, array $item = [], arra
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    "use strict";
+    // Mantener el historial abierto y restaurar el scroll tras registrar un cobro.
+    // El cobro recarga la misma URL (con sus filtros); esto evita que el usuario
+    // "pierda el lugar" donde estaba trabajando.
+    var details = document.querySelector("details.pos-history");
+    if (!details) {
+        return;
+    }
+
+    var OPEN_KEY = "invoices.history.open";
+    var SCROLL_KEY = "invoices.history.scroll";
+
+    if (sessionStorage.getItem(OPEN_KEY) === "1") {
+        details.open = true;
+    }
+    details.addEventListener("toggle", function () {
+        sessionStorage.setItem(OPEN_KEY, details.open ? "1" : "0");
+    });
+
+    var savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll !== null) {
+        sessionStorage.removeItem(SCROLL_KEY);
+        window.requestAnimationFrame(function () {
+            window.scrollTo(0, parseInt(savedScroll, 10) || 0);
+        });
+    }
+
+    var paymentForm = document.querySelector("[data-document-payment-form]");
+    if (paymentForm) {
+        paymentForm.addEventListener("submit", function () {
+            sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+        });
+    }
+})();
+</script>

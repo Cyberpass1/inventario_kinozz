@@ -1,73 +1,47 @@
-<section class="page-header">
-    <div>
-        <span class="eyebrow">Proveedores</span>
-        <h2>Consulta y mantenimiento de proveedores</h2>
-        <p>Administra la base de proveedores desde finanzas y controla su estado operativo.</p>
-    </div>
-    <div class="header-summary">
-        <div><span>Total</span><strong><?= (int) $summary['suppliers'] ?></strong></div>
-        <div><span>Activos</span><strong><?= (int) $summary['active'] ?></strong></div>
-        <div><span>Con compras</span><strong><?= (int) $summary['with_purchases'] ?></strong></div>
-    </div>
-</section>
+<?php
+$totalSuppliers = (int) ($summary['suppliers'] ?? count($suppliers));
+$activeSuppliers = (int) ($summary['active'] ?? 0);
+$withPurchases = (int) ($summary['with_purchases'] ?? 0);
+$editId = $currentSupplier ? (int) $currentSupplier['id'] : 0;
+?>
 
-<section class="workspace-grid">
-    <article class="card card-feature">
-        <header class="section-head">
-            <div>
-                <h3><?= $currentSupplier ? 'Editar proveedor' : 'Nuevo proveedor' ?></h3>
-                <p><?= $currentSupplier ? 'Actualiza la ficha seleccionada o corrige sus datos comerciales.' : 'Crea un proveedor listo para usar en compras y cuentas por pagar.' ?></p>
-            </div>
-            <?php if ($currentSupplier): ?>
-                <a class="btn btn-outline btn-sm" href="/suppliers">Cancelar</a>
-            <?php endif; ?>
-        </header>
-
-        <form method="post" action="<?= e($currentSupplier ? '/suppliers/' . $currentSupplier['id'] : '/suppliers') ?>" class="form two-cols">
-            <?= csrf_field() ?>
-            <label>Nombre<input name="name" required value="<?= e($currentSupplier['name'] ?? '') ?>"></label>
-            <label>Documento<input name="document" value="<?= e($currentSupplier['document'] ?? '') ?>"></label>
-            <label>Telefono<input name="phone" value="<?= e($currentSupplier['phone'] ?? '') ?>"></label>
-            <label>Email<input name="email" value="<?= e($currentSupplier['email'] ?? '') ?>"></label>
-            <label class="col-span-2">Direccion<textarea name="address"><?= e($currentSupplier['address'] ?? '') ?></textarea></label>
-            <button class="btn col-span-2"><?= $currentSupplier ? 'Guardar cambios' : 'Crear proveedor' ?></button>
-        </form>
-    </article>
-
-    <article class="card">
-        <header class="section-head">
-            <div>
-                <h3>Acciones rapidas</h3>
-                <p>Atajos del flujo financiero relacionado.</p>
-            </div>
-        </header>
-
-        <div class="stack-list">
-            <div class="stack-row">
-                <div>
-                    <strong>Compras</strong>
-                    <small>Los proveedores activos quedan disponibles al registrar nuevas compras.</small>
-                </div>
-                <a href="/purchases" class="btn btn-sm btn-outline">Ir a compras</a>
-            </div>
-            <div class="stack-row">
-                <div>
-                    <strong>Reportes</strong>
-                    <small>Consulta el impacto de compras y cuentas por pagar.</small>
-                </div>
-                <a href="/reports?type=payables" class="btn btn-sm btn-outline">Ver CxP</a>
-            </div>
-        </div>
-    </article>
-</section>
-
-<article class="card">
-    <header class="section-head">
-        <div>
+<section class="inventory-shell">
+    <header class="inventory-topbar">
+        <div class="inventory-topbar-title">
             <h3>Directorio de proveedores</h3>
-            <p>Visualiza estado, actividad de compras y datos de contacto desde una sola tabla.</p>
+            <small>Estado operativo, actividad de compras y datos de contacto en una sola tabla.</small>
+        </div>
+        <div class="inventory-topbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-modal-open="supplier-create-modal">+ Nuevo proveedor</button>
+            <a class="btn btn-outline btn-sm" href="/purchases">Ir a compras</a>
         </div>
     </header>
+
+    <div class="inventory-kpis">
+        <div class="inventory-kpi"><span>Proveedores</span><strong><?= $totalSuppliers ?></strong></div>
+        <div class="inventory-kpi inventory-kpi-in"><span>Activos</span><strong><?= $activeSuppliers ?></strong></div>
+        <div class="inventory-kpi"><span>Con compras</span><strong><?= $withPurchases ?></strong></div>
+    </div>
+</section>
+
+<!-- Directorio protagonista -->
+<article class="card inventory-catalog-card">
+    <div class="inventory-catalog-toolbar">
+        <label class="inventory-filter inventory-filter-search">
+            <span>Buscar</span>
+            <input
+                type="search"
+                placeholder="Proveedor, documento, telefono o email..."
+                autocomplete="off"
+                data-table-filter-input
+                data-table-filter-target="suppliers-directory"
+            >
+        </label>
+        <div class="inventory-filter-meta">
+            <strong data-table-filter-count data-table-filter-target="suppliers-directory" data-table-filter-label="proveedores"><?= $totalSuppliers ?> proveedores</strong>
+            <small>en el directorio</small>
+        </div>
+    </div>
 
     <div class="table-wrap table-wrap-mobile-slider">
         <table class="table mobile-cards">
@@ -83,11 +57,21 @@
                     <th></th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-table-filter-rows="suppliers-directory" data-table-pagination data-table-pagination-size="20">
                 <?php if ($suppliers): ?>
                     <?php foreach ($suppliers as $supplier): ?>
-                        <?php $isActive = (int) ($supplier['is_active'] ?? 1) === 1; ?>
-                        <tr>
+                        <?php
+                        $supplierId = (int) $supplier['id'];
+                        $isActive = (int) ($supplier['is_active'] ?? 1) === 1;
+                        $haystack = strtolower(trim(
+                            ((string) ($supplier['name'] ?? '')) . ' '
+                            . ((string) ($supplier['document'] ?? '')) . ' '
+                            . ((string) ($supplier['phone'] ?? '')) . ' '
+                            . ((string) ($supplier['email'] ?? '')) . ' '
+                            . ($isActive ? 'activo' : 'inactivo')
+                        ));
+                        ?>
+                        <tr data-filter-search="<?= e($haystack) ?>">
                             <td data-label="Proveedor">
                                 <div class="money-stack">
                                     <strong><?= e($supplier['name'] ?? '') ?></strong>
@@ -104,9 +88,9 @@
                                     <?= $isActive ? 'Activo' : 'Inactivo' ?>
                                 </span>
                             </td>
-                            <td data-label="Acciones" class="actions-row">
-                                <a class="btn btn-sm btn-outline" href="/suppliers?edit=<?= (int) $supplier['id'] ?>">Editar</a>
-                                <form method="post" action="/suppliers/<?= (int) $supplier['id'] ?>/status" class="document-action-form" onsubmit="return confirm('Se actualizara el estado operativo del proveedor.');">
+                            <td data-label="Acciones" class="actions-row document-actions">
+                                <button type="button" class="btn btn-sm btn-outline" data-modal-open="supplier-edit-<?= $supplierId ?>">Editar</button>
+                                <form method="post" action="/suppliers/<?= $supplierId ?>/status" class="document-action-form" onsubmit="return confirm('Se actualizara el estado operativo del proveedor.');">
                                     <?= csrf_field() ?>
                                     <button class="btn btn-sm <?= $isActive ? 'btn-danger-soft' : 'btn-outline' ?>">
                                         <?= $isActive ? 'Inactivar' : 'Activar' ?>
@@ -122,5 +106,65 @@
                 <?php endif; ?>
             </tbody>
         </table>
+        <div class="empty-state" data-table-filter-empty="suppliers-directory" hidden>No hay proveedores que coincidan con la busqueda.</div>
     </div>
 </article>
+
+<!-- Modal: nuevo proveedor -->
+<div class="modal-shell" data-modal="supplier-create-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supplier-create-title">
+        <header class="modal-header">
+            <div>
+                <span class="eyebrow">Proveedores</span>
+                <h3 id="supplier-create-title">Nuevo proveedor</h3>
+            </div>
+            <button type="button" class="modal-close" data-modal-close>&times;</button>
+        </header>
+
+        <form method="post" action="/suppliers" class="form two-cols">
+            <?= csrf_field() ?>
+            <label>Nombre<input name="name" required></label>
+            <label>Documento<input name="document"></label>
+            <label>Telefono<input name="phone"></label>
+            <label>Email<input type="email" name="email"></label>
+            <label class="col-span-2">Direccion<textarea name="address"></textarea></label>
+            <button class="btn col-span-2">Crear proveedor</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modales: editar proveedor -->
+<?php foreach ($suppliers as $supplier): ?>
+    <?php $supplierId = (int) $supplier['id']; ?>
+    <div class="modal-shell" data-modal="supplier-edit-<?= $supplierId ?>" aria-hidden="true">
+        <div class="modal-backdrop" data-modal-close></div>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supplier-edit-title-<?= $supplierId ?>">
+            <header class="modal-header">
+                <div>
+                    <span class="eyebrow">Proveedor</span>
+                    <h3 id="supplier-edit-title-<?= $supplierId ?>">Editar <?= e($supplier['name'] ?? '') ?></h3>
+                </div>
+                <button type="button" class="modal-close" data-modal-close>&times;</button>
+            </header>
+
+            <form method="post" action="/suppliers/<?= $supplierId ?>" class="form two-cols">
+                <?= csrf_field() ?>
+                <label>Nombre<input name="name" required value="<?= e($supplier['name'] ?? '') ?>"></label>
+                <label>Documento<input name="document" value="<?= e($supplier['document'] ?? '') ?>"></label>
+                <label>Telefono<input name="phone" value="<?= e($supplier['phone'] ?? '') ?>"></label>
+                <label>Email<input type="email" name="email" value="<?= e($supplier['email'] ?? '') ?>"></label>
+                <label class="col-span-2">Direccion<textarea name="address"><?= e($supplier['address'] ?? '') ?></textarea></label>
+                <button class="btn col-span-2">Guardar cambios</button>
+            </form>
+        </div>
+    </div>
+<?php endforeach; ?>
+
+<?php if ($editId > 0): ?>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelector('[data-modal-open="supplier-edit-<?= $editId ?>"]')?.click();
+    });
+</script>
+<?php endif; ?>

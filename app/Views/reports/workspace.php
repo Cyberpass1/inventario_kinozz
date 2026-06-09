@@ -62,6 +62,7 @@ $reportLinks = [
         <div class="reports-topbar-actions">
             <a class="btn btn-outline btn-sm" href="<?= e($pdfUrl) ?>" target="_blank" rel="noopener noreferrer">PDF</a>
             <?php if ($mode === 'treasury_accounts' && $canManageTreasury): ?>
+                <a class="btn btn-outline btn-sm" href="<?= e(app_url('/settings/treasury-accounts')) ?>">Administrar cuentas</a>
                 <button type="button" class="btn btn-outline btn-sm" data-modal-open="treasury-reconcile-modal">Conciliar</button>
                 <button type="button" class="btn btn-outline btn-sm" data-modal-open="treasury-opening-balance-modal">Saldo inicial</button>
             <?php endif; ?>
@@ -436,7 +437,7 @@ $reportLinks = [
                         <?php elseif ($mode === 'movements'): ?>
                             <th>Fecha</th><th>Producto</th><th>Almacen</th><th>Tipo</th><th>Cantidad</th><th>Referencia</th>
                         <?php elseif ($mode === 'treasury_accounts'): ?>
-                            <th>Cuenta</th><th>Metodo</th><th>Moneda</th><th>Saldo inicial</th><th>Saldo antes</th><th>Entradas</th><th>Salidas</th><th>Saldo corte</th><th>Equiv. <?= e($secondaryCurrency) ?></th><th>Equiv. <?= e($baseCurrency) ?></th><th>Acciones</th>
+                            <th>Cuenta</th><th>Tipo</th><th>Metodo</th><th>Moneda</th><th>Saldo inicial</th><th>Saldo antes</th><th>Entradas</th><th>Salidas</th><th>Saldo corte</th><th>Equiv. <?= e($secondaryCurrency) ?></th><th>Equiv. <?= e($baseCurrency) ?></th><th>Acciones</th>
                         <?php elseif ($mode === 'journal_entries'): ?>
                             <th>Fecha</th><th>Origen</th><th>Referencia</th><th>Cuenta</th><th>Tercero</th><th>Moneda</th><th>Monto doc.</th><th>Debe <?= e($reportingCurrency) ?></th><th>Haber <?= e($reportingCurrency) ?></th>
                         <?php else: ?>
@@ -506,6 +507,7 @@ $reportLinks = [
                                             <small>Codigo <?= e($row['account_code'] ?? '') ?></small>
                                         </div>
                                     </td>
+                                    <td data-label="Tipo"><span class="badge badge-neutral"><?= e(account_type_label($row['account_type'] ?? 'bank')) ?></span></td>
                                     <td data-label="Metodo"><?= e(payment_method_label((string) ($row['method_type'] ?? ''))) ?></td>
                                     <td data-label="Moneda"><?= e($row['currency_code'] ?? '') ?></td>
                                     <td data-label="Saldo inicial"><?= money($row['opening_balance'] ?? 0) ?> <?= e($row['currency_code'] ?? '') ?></td>

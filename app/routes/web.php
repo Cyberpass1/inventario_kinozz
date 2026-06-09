@@ -17,6 +17,7 @@ use App\Controllers\ReportsControllerModern as ReportsController;
 use App\Controllers\ServiceControllerModern as ServiceController;
 use App\Controllers\SettingsController;
 use App\Controllers\SupplierControllerModern as SupplierController;
+use App\Controllers\TreasuryAccountController;
 use App\Core\Router;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\RoleMiddleware;
@@ -144,5 +145,9 @@ $router->post('/settings/rates/sync', [SettingsController::class, 'syncRate'], $
 $router->post('/settings/users', [SettingsController::class, 'storeUser'], $admin);
 $router->post('/settings/users/{id}', [SettingsController::class, 'updateUser'], $admin);
 $router->post('/settings/users/{id}/status', [SettingsController::class, 'toggleUserStatus'], $admin);
+$router->get('/settings/treasury-accounts', [TreasuryAccountController::class, 'index'], $admin);
+$router->post('/settings/treasury-accounts', [TreasuryAccountController::class, 'store'], $admin);
+$router->post('/settings/treasury-accounts/{id}', [TreasuryAccountController::class, 'update'], $admin);
+$router->post('/settings/treasury-accounts/{id}/status', [TreasuryAccountController::class, 'toggleStatus'], $admin);
 
 return $router;

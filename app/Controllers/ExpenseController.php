@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Models\CashAccount;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 class ExpenseController extends Controller
@@ -34,7 +35,8 @@ class ExpenseController extends Controller
             'categories' => count($categories),
         ];
 
-        $this->view('expenses/index', compact('expenses', 'categories', 'categoryUsage', 'rate', 'from', 'to', 'summary'), 'layouts/app_modern');
+        $cashAccounts = (new CashAccount())->active();
+        $this->view('expenses/index', compact('expenses', 'categories', 'categoryUsage', 'rate', 'from', 'to', 'summary', 'cashAccounts'), 'layouts/app_modern');
     }
 
     public function storeCategory(): void
@@ -93,7 +95,6 @@ class ExpenseController extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => 'Gasto registrado.',
-                    'redirect' => app_url('/expenses'),
                 ]);
             }
 
@@ -122,7 +123,6 @@ class ExpenseController extends Controller
                 $this->json([
                     'ok' => true,
                     'message' => 'Gasto actualizado.',
-                    'redirect' => app_url('/expenses'),
                 ]);
             }
 
@@ -193,6 +193,7 @@ class ExpenseController extends Controller
             'amount_original' => $amounts['amount_original'],
             'amount_converted' => $amounts['amount_consolidated'],
             'payment_method' => $paymentMethod,
+            'treasury_account_id' => (int) ($source['treasury_account_id'] ?? 0),
         ];
     }
 

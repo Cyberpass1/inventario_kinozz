@@ -5,94 +5,56 @@ $roleLabels = [
     'general_consultant' => 'Consulta general',
 ];
 ?>
-<section class="page-header">
-    <div>
-        <span class="eyebrow">Usuarios</span>
-        <h2>Gestion interna del sistema</h2>
-        <p>Solo administracion puede crear, editar, activar o desactivar usuarios operativos del sistema.</p>
-    </div>
-    <div class="header-summary">
-        <div><span>Total usuarios</span><strong><?= count($users ?? []) ?></strong></div>
-        <div><span>Activos</span><strong><?= count(array_filter($users ?? [], static fn (array $user): bool => (int) ($user['is_active'] ?? 1) === 1)) ?></strong></div>
-        <div><span>Ventas</span><strong><?= count(array_filter($users ?? [], static fn (array $user): bool => ($user['role'] ?? '') === 'vendor')) ?></strong></div>
-        <div><span>Consulta</span><strong><?= count(array_filter($users ?? [], static fn (array $user): bool => ($user['role'] ?? '') === 'general_consultant')) ?></strong></div>
-    </div>
-</section>
-
-<section class="grid two">
-    <article class="card card-feature">
-        <header class="section-head">
-            <div>
-                <h3>Crear usuario</h3>
-                <p>Puedes crear vendedores y usuarios de consulta. Desde aqui no se crean administradores.</p>
-            </div>
-        </header>
-
-        <form method="post" action="<?= e(app_url('/settings/users')) ?>" class="form two-cols">
-            <?= csrf_field() ?>
-            <label>Nombre
-                <input name="name" required placeholder="Nombre visible del usuario">
-            </label>
-            <label>Usuario
-                <input name="username" required placeholder="usuario.sistema">
-            </label>
-            <label>Correo
-                <input type="email" name="email" placeholder="correo@empresa.com">
-            </label>
-            <label>Rol
-                <select name="role" required>
-                    <option value="vendor">Ventas</option>
-                    <option value="general_consultant">Consulta general</option>
-                </select>
-            </label>
-            <label class="col-span-2">Contrasena inicial
-                <input type="password" name="password" required minlength="6" placeholder="Minimo 6 caracteres">
-            </label>
-            <button class="btn col-span-2">Crear usuario</button>
-        </form>
-    </article>
-
-    <article class="card">
-        <header class="section-head">
-            <div>
-                <h3>Politicas del modulo</h3>
-                <p>El administrador puede mantener usuarios, pero con protecciones basicas para evitar bloqueos operativos.</p>
-            </div>
-        </header>
-
-        <div class="stack-list">
-            <div class="stack-row">
-                <div>
-                    <strong>Creacion limitada</strong>
-                    <small>Solo se pueden crear perfiles de ventas y consulta general.</small>
-                </div>
-                <span class="badge badge-ok">Activo</span>
-            </div>
-            <div class="stack-row">
-                <div>
-                    <strong>Edicion completa</strong>
-                    <small>Puedes cambiar nombre, usuario, correo, rol y contrasena.</small>
-                </div>
-                <span class="badge badge-neutral">Gestion</span>
-            </div>
-            <div class="stack-row">
-                <div>
-                    <strong>Desactivacion segura</strong>
-                    <small>No se permiten desactivaciones de administradores desde este modulo.</small>
-                </div>
-                <span class="badge badge-neutral">Protegido</span>
-            </div>
+<?php
+$totalUsers = count($users ?? []);
+$activeUsers = count(array_filter($users ?? [], static fn (array $user): bool => (int) ($user['is_active'] ?? 1) === 1));
+$vendorUsers = count(array_filter($users ?? [], static fn (array $user): bool => ($user['role'] ?? '') === 'vendor'));
+$consultUsers = count(array_filter($users ?? [], static fn (array $user): bool => ($user['role'] ?? '') === 'general_consultant'));
+?>
+<section class="inventory-shell">
+    <header class="inventory-topbar">
+        <div class="inventory-topbar-title">
+            <h3>Usuarios del sistema</h3>
+            <small>Solo administracion crea, edita, activa o desactiva cuentas operativas internas.</small>
         </div>
-    </article>
+        <div class="inventory-topbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-modal-open="user-create-modal">+ Nuevo usuario</button>
+            <a class="btn btn-outline btn-sm" href="<?= e(app_url('/settings')) ?>">Configuracion</a>
+        </div>
+    </header>
+
+    <div class="inventory-kpis">
+        <div class="inventory-kpi"><span>Total usuarios</span><strong><?= $totalUsers ?></strong></div>
+        <div class="inventory-kpi inventory-kpi-in"><span>Activos</span><strong><?= $activeUsers ?></strong></div>
+        <div class="inventory-kpi"><span>Ventas</span><strong><?= $vendorUsers ?></strong></div>
+        <div class="inventory-kpi"><span>Consulta</span><strong><?= $consultUsers ?></strong></div>
+    </div>
 </section>
 
-<article class="card">
+<article class="card inventory-catalog-card">
     <header class="section-head">
         <div>
-            <h3>Usuarios del sistema</h3>
+            <h3>Cuentas registradas</h3>
             <p>Administra accesos, roles y estado operativo de cada cuenta interna.</p>
         </div>
     </header>
+
+    <div class="inventory-catalog-toolbar">
+        <label class="inventory-filter inventory-filter-search">
+            <span>Buscar</span>
+            <input
+                type="search"
+                placeholder="Nombre, usuario, correo o rol..."
+                autocomplete="off"
+                data-table-filter-input
+                data-table-filter-target="users-directory"
+            >
+        </label>
+        <div class="inventory-filter-meta">
+            <strong data-table-filter-count data-table-filter-target="users-directory" data-table-filter-label="usuarios"><?= $totalUsers ?> usuarios</strong>
+            <small>registrados</small>
+        </div>
+    </div>
 
     <div class="table-wrap table-wrap-mobile-slider">
         <table class="table mobile-cards">
@@ -107,15 +69,23 @@ $roleLabels = [
                     <th></th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-table-filter-rows="users-directory" data-table-pagination data-table-pagination-size="20">
                 <?php if (!empty($users)): ?>
                     <?php foreach ($users as $managedUser): ?>
                         <?php
                         $userId = (int) $managedUser['id'];
                         $isActive = (int) ($managedUser['is_active'] ?? 1) === 1;
                         $isAdminRow = ($managedUser['role'] ?? '') === 'administrator';
+                        $roleLabel = $roleLabels[$managedUser['role'] ?? ''] ?? ($managedUser['role'] ?? '');
+                        $haystack = strtolower(trim(
+                            ((string) ($managedUser['name'] ?? '')) . ' '
+                            . ((string) ($managedUser['username'] ?? '')) . ' '
+                            . ((string) ($managedUser['email'] ?? '')) . ' '
+                            . $roleLabel . ' '
+                            . ($isActive ? 'activo' : 'desactivado')
+                        ));
                         ?>
-                        <tr>
+                        <tr data-filter-search="<?= e($haystack) ?>">
                             <td data-label="Nombre"><?= e($managedUser['name'] ?? '') ?></td>
                             <td data-label="Usuario"><?= e($managedUser['username'] ?? '') ?></td>
                             <td data-label="Correo"><?= e($managedUser['email'] ?? 'Sin correo') ?></td>
@@ -146,8 +116,47 @@ $roleLabels = [
                 <?php endif; ?>
             </tbody>
         </table>
+        <div class="empty-state" data-table-filter-empty="users-directory" hidden>No hay usuarios que coincidan con la busqueda.</div>
     </div>
 </article>
+
+<!-- Modal: crear usuario -->
+<div class="modal-shell" data-modal="user-create-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
+        <header class="modal-header">
+            <div>
+                <span class="eyebrow">Usuario</span>
+                <h3 id="user-create-title">Crear usuario</h3>
+            </div>
+            <button type="button" class="modal-close" data-modal-close>&times;</button>
+        </header>
+
+        <form method="post" action="<?= e(app_url('/settings/users')) ?>" class="form two-cols">
+            <?= csrf_field() ?>
+            <label>Nombre
+                <input name="name" required placeholder="Nombre visible del usuario">
+            </label>
+            <label>Usuario
+                <input name="username" required placeholder="usuario.sistema">
+            </label>
+            <label>Correo
+                <input type="email" name="email" placeholder="correo@empresa.com">
+            </label>
+            <label>Rol
+                <select name="role" required>
+                    <option value="vendor">Ventas</option>
+                    <option value="general_consultant">Consulta general</option>
+                </select>
+            </label>
+            <label class="col-span-2">Contrasena inicial
+                <input type="password" name="password" required minlength="6" placeholder="Minimo 6 caracteres">
+            </label>
+            <small class="col-span-2 pos-meta-hint">Solo perfiles de ventas y consulta. Los administradores no se crean ni se desactivan desde este modulo.</small>
+            <button class="btn col-span-2">Crear usuario</button>
+        </form>
+    </div>
+</div>
 
 <?php foreach ($users ?? [] as $managedUser): ?>
     <?php

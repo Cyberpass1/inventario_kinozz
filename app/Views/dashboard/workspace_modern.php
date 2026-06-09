@@ -610,14 +610,9 @@ $reportLinks = [
     border-radius: var(--ops-radius);
     background: var(--ops-surface);
     box-shadow: var(--ops-shadow-sm);
-    border-top: 3px solid var(--ops-border-strong);
     transition: transform .2s var(--ops-ease), box-shadow .2s var(--ops-ease);
 }
 .ops-metric:hover { transform: translateY(-2px); box-shadow: var(--ops-shadow); }
-.ops-metric--sales { border-top-color: var(--ops-brand); }
-.ops-metric--purchases { border-top-color: var(--ops-blue); }
-.ops-metric--expenses { border-top-color: var(--ops-amber); }
-.ops-metric--balance { border-top-color: #64748b; }
 .ops-metric-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ops-metric-head span { font-size: 13px; font-weight: 700; color: var(--ops-soft); }
 .ops-metric-head i { color: var(--ops-muted); font-size: 16px; }

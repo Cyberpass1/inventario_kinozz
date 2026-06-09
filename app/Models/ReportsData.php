@@ -282,6 +282,7 @@ class ReportsData
                 a.id,
                 a.account_code,
                 a.account_name,
+                a.account_type,
                 a.method_type,
                 a.currency_code,
                 a.opening_balance,
@@ -310,6 +311,7 @@ class ReportsData
                 a.id,
                 a.account_code,
                 a.account_name,
+                a.account_type,
                 a.method_type,
                 a.currency_code,
                 a.opening_balance

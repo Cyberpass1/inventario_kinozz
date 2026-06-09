@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Controller;
+use App\Models\CashAccount;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\Product;
@@ -23,7 +24,11 @@ class InvoiceControllerModern extends Controller
         $rate = ['rate' => system_exchange_rate(date('Y-m-d')), 'currency_from' => 'USD', 'currency_to' => 'VES'];
         $invoiceDueDays = invoice_due_days();
         $historyExportQuery = $this->buildHistoryExportQuery($canFilterHistory, $historyFilters);
+<<<<<<< HEAD
         $quotationDraft = $this->quotationDraftForInvoice();
+=======
+        $cashAccounts = (new CashAccount())->active();
+>>>>>>> d5f3e10 (cambios de tesoreria)
 
         $summary = [
             'operations' => count($invoices),
@@ -43,7 +48,11 @@ class InvoiceControllerModern extends Controller
             ),
         ];
 
+<<<<<<< HEAD
         $this->view('invoices/workspace', compact('invoices', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'invoiceDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole', 'quotationDraft'), 'layouts/app_modern');
+=======
+        $this->view('invoices/workspace', compact('invoices', 'clientHints', 'products', 'nextNumber', 'rate', 'summary', 'invoiceDueDays', 'canFilterHistory', 'historyFilters', 'historyExportQuery', 'currentRole', 'cashAccounts'), 'layouts/app_modern');
+>>>>>>> d5f3e10 (cambios de tesoreria)
     }
 
     public function exportHistory(): void
@@ -252,10 +261,11 @@ class InvoiceControllerModern extends Controller
             (new Invoice())->registerPayment($invoiceId, $this->buildPaymentPayload($_POST, $invoice, $paymentDate, 'Cobro'));
 
             if ($this->wantsJson()) {
+                // Sin 'redirect': el front recarga la URL actual (window.location.reload)
+                // y conserva los filtros de fecha/busqueda que el usuario tenia aplicados.
                 $this->json([
                     'ok' => true,
                     'message' => 'Cobro registrado correctamente.',
-                    'redirect' => app_url('/invoices'),
                 ]);
             }
 
@@ -434,7 +444,7 @@ class InvoiceControllerModern extends Controller
         $paymentCurrencyDifference = money_difference($amount, $availableInPaymentCurrency);
         $matchesDisplayedBalance = abs($amount - $availableInPaymentCurrency) <= 0.01
             || abs($appliedOriginal - $availableOriginal) <= 0.01;
-        $roundingTolerance = payment_rounding_tolerance();
+        $roundingTolerance = payment_rounding_tolerance(max($availableOriginal, $availableInPaymentCurrency));
 
         if (
             $matchesDisplayedBalance
@@ -467,6 +477,7 @@ class InvoiceControllerModern extends Controller
             'amount_converted' => $paymentConverted,
             'applied_original' => $appliedOriginal,
             'applied_converted' => $appliedConverted,
+            'treasury_account_id' => (int) ($source['treasury_account_id'] ?? 0),
             'notes' => trim((string) ($source['payment_notes'] ?? $source['notes'] ?? '')),
         ];
     }

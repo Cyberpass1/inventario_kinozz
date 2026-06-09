@@ -339,6 +339,12 @@ $productOptionsMarkup = (static function (array $products): string {
                                 <option value="<?= e(base_currency()) ?>"><?= e(base_currency()) ?></option>
                             </select>
                         </label>
+                        <label class="pos-checkout-full">Cuenta de tesoreria
+                            <select name="treasury_account_id" data-treasury-account-select>
+                                <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                            </select>
+                            <small>Se autollena segun la moneda; puedes cambiarla.</small>
+                        </label>
                         <label class="pos-checkout-full">Referencia
                             <input name="payment_reference" placeholder="Opcional">
                         </label>
@@ -562,7 +568,7 @@ $productOptionsMarkup = (static function (array $products): string {
             </div>
             <button type="button" class="modal-close" data-modal-close>&times;</button>
         </header>
-        <form method="post" action="" class="form two-cols" data-document-payment-form>
+        <form method="post" action="" class="form two-cols" data-ajax-form="1" data-document-payment-form>
             <?= csrf_field() ?>
             <div class="col-span-2 live-panel">
                 <div><span>Total documento</span><strong data-document-payment-total>0,00</strong></div>
@@ -588,6 +594,12 @@ $productOptionsMarkup = (static function (array $products): string {
                         <option value="<?= e($value) ?>" <?= $value === 'cash' ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </label>
+            <label class="col-span-2">Cuenta de tesoreria
+                <select name="treasury_account_id" data-treasury-account-select>
+                    <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                </select>
+                <small>Se autollena segun la moneda del pago; puedes cambiarla.</small>
             </label>
             <label class="col-span-2">Notas
                 <textarea name="notes" placeholder="Banco, soporte, observaciones del pago"></textarea>
@@ -775,6 +787,44 @@ $productOptionsMarkup = (static function (array $products): string {
         workspace.querySelector(".pos-form")?.dispatchEvent(new Event("input", { bubbles: true }));
 
         hidePanel();
+    });
+})();
+</script>
+
+<script>
+(function () {
+    "use strict";
+    // Tras una accion del historial (pago/edicion) la pagina recarga la misma URL
+    // con sus filtros; esto reabre el historial y restaura el scroll para no perder
+    // el lugar donde estabas trabajando.
+    var details = document.querySelector("details.pos-history");
+    if (!details) {
+        return;
+    }
+
+    var OPEN_KEY = "pos.history.open:" + window.location.pathname;
+    var SCROLL_KEY = "pos.history.scroll:" + window.location.pathname;
+
+    if (sessionStorage.getItem(OPEN_KEY) === "1") {
+        details.open = true;
+    }
+    details.addEventListener("toggle", function () {
+        sessionStorage.setItem(OPEN_KEY, details.open ? "1" : "0");
+    });
+
+    var savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll !== null) {
+        sessionStorage.removeItem(SCROLL_KEY);
+        window.requestAnimationFrame(function () {
+            window.scrollTo(0, parseInt(savedScroll, 10) || 0);
+        });
+    }
+
+    var saveScroll = function () {
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+    };
+    document.querySelectorAll("[data-document-payment-form], .pos-history form").forEach(function (form) {
+        form.addEventListener("submit", saveScroll);
     });
 })();
 </script>

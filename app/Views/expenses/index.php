@@ -57,6 +57,12 @@ $rateValue = (float) ($rate['rate'] ?? default_exchange_rate());
                         <label class="pos-meta-span">Referencia
                             <input name="reference" required placeholder="Pago de servicio, caja chica o compra menor">
                         </label>
+                        <label class="pos-meta-span">Cuenta de tesoreria
+                            <select name="treasury_account_id" data-treasury-account-select>
+                                <?= treasury_account_options_markup($cashAccounts ?? []) ?>
+                            </select>
+                            <small>Se autollena segun la moneda; puedes cambiarla.</small>
+                        </label>
                         <label>Metodo de salida
                             <select name="payment_method" data-payment-method-select>
                                 <?php foreach (payment_method_options() as $value => $label): ?>
@@ -310,6 +316,12 @@ $rateValue = (float) ($rate['rate'] ?? default_exchange_rate());
                         <option value="<?= e(base_currency()) ?>" <?= normalize_currency_code((string) ($expense['currency_code'] ?? '')) === normalize_currency_code(base_currency()) ? 'selected' : '' ?>><?= e(base_currency()) ?></option>
                     </select>
                 </label>
+                <label class="col-span-2">Cuenta de tesoreria
+                    <select name="treasury_account_id" data-treasury-account-select>
+                        <?= treasury_account_options_markup($cashAccounts ?? [], (int) ($expense['treasury_account_id'] ?? 0)) ?>
+                    </select>
+                    <small>Se autollena segun la moneda; puedes cambiarla.</small>
+                </label>
                 <label>Metodo de salida
                     <select name="payment_method" data-payment-method-select>
                         <?php foreach (payment_method_options() as $value => $label): ?>
@@ -474,6 +486,44 @@ $rateValue = (float) ($rate['rate'] ?? default_exchange_rate());
             amountInput.focus();
             amountInput.select?.();
         }
+    });
+})();
+</script>
+
+<script>
+(function () {
+    "use strict";
+    // Tras una accion del historial (registro/edicion de gasto) la pagina recarga la
+    // misma URL con sus filtros; esto reabre el historial y restaura el scroll para
+    // no perder el lugar donde estabas trabajando.
+    var details = document.querySelector("details.pos-history");
+    if (!details) {
+        return;
+    }
+
+    var OPEN_KEY = "pos.history.open:" + window.location.pathname;
+    var SCROLL_KEY = "pos.history.scroll:" + window.location.pathname;
+
+    if (sessionStorage.getItem(OPEN_KEY) === "1") {
+        details.open = true;
+    }
+    details.addEventListener("toggle", function () {
+        sessionStorage.setItem(OPEN_KEY, details.open ? "1" : "0");
+    });
+
+    var savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll !== null) {
+        sessionStorage.removeItem(SCROLL_KEY);
+        window.requestAnimationFrame(function () {
+            window.scrollTo(0, parseInt(savedScroll, 10) || 0);
+        });
+    }
+
+    var saveScroll = function () {
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+    };
+    document.querySelectorAll("[data-document-payment-form], .pos-history form").forEach(function (form) {
+        form.addEventListener("submit", saveScroll);
     });
 })();
 </script>
